@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Synthetic User Lab Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 720px; margin: 40px auto; line-height: 1.6; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+    .hidden { display: none; }
+    .success-message { color: #0a7a30; font-weight: bold; }
+    .error-message { color: #b42318; }
+    label { display: block; margin-top: 12px; }
+    input { width: 100%; padding: 8px; margin-top: 4px; }
+    button { margin-top: 16px; padding: 10px 16px; }
+  </style>
+</head>
+<body>
+  <main>
+    <section id="intro-card" class="card">
+      <h1>Synthetic User Lab Demo</h1>
+      <p>这是一个用于验证最小 Run 闭环模块的内置页面。</p>
+      <button id="start-demo" type="button">开始体验</button>
+    </section>
+
+    <section id="form-card" class="card hidden">
+      <h2>提交体验表单</h2>
+      <p>请填写用户名和邮箱，完成本次 demo 任务。</p>
+      <label for="user-name">用户名</label>
+      <input id="user-name" name="user_name" type="text" placeholder="请输入用户名" />
+      <label for="user-email">邮箱</label>
+      <input id="user-email" name="user_email" type="email" placeholder="请输入邮箱" />
+      <button id="submit-demo" type="button">提交体验表单</button>
+      <p id="form-error" class="error-message hidden" role="alert">请先完整填写所有字段。</p>
+    </section>
+
+    <section id="success-card" class="card hidden">
+      <h2>提交成功</h2>
+      <p class="success-message">提交成功</p>
+      <p>你已经完成 Synthetic User Lab 的最小 demo 任务。</p>
+    </section>
+  </main>
+
+  <script>
+    const introCard = document.getElementById('intro-card');
+    const formCard = document.getElementById('form-card');
+    const successCard = document.getElementById('success-card');
+    const errorText = document.getElementById('form-error');
+    const nameInput = document.getElementById('user-name');
+    const emailInput = document.getElementById('user-email');
+
+    document.getElementById('start-demo').addEventListener('click', () => {
+      introCard.classList.add('hidden');
+      formCard.classList.remove('hidden');
+    });
+
+    document.getElementById('submit-demo').addEventListener('click', () => {
+      const hasName = nameInput.value.trim().length > 0;
+      const hasEmail = emailInput.value.trim().length > 0;
+
+      if (!hasName || !hasEmail) {
+        errorText.classList.remove('hidden');
+        return;
+      }
+
+      errorText.classList.add('hidden');
+      formCard.classList.add('hidden');
+      successCard.classList.remove('hidden');
+    });
+  </script>
+</body>
+</html>
