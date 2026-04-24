@@ -218,9 +218,9 @@ def build_demo_run_graph():
     workflow.add_edge("execute_action", "validate_progress")
     workflow.add_edge("validate_progress", "log_step")
     workflow.add_conditional_edges(
-        "log_step",
-        route_after_log,
-        {"finalize_report": "finalize_report", "observe_page": "observe_page"},
+        "log_step",  # 起始node
+        route_after_log,  # 路由函数
+        {"finalize_report": "finalize_report", "observe_page": "observe_page"},  # 满足条件的下一个node
     )
     workflow.add_edge("finalize_report", END)
     return workflow.compile()
