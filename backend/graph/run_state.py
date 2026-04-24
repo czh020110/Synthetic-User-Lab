@@ -24,15 +24,15 @@ from backend.schemas.run_schemas import (
     ValidationResult,
 )
 
-
-class DemoRunState(TypedDict):
+# 主Graph状态
+class DemoRunState(TypedDict):  # 目前是demo
     run_id: Required[str]
     request: Required[RunRequest]
     screenshot_dir: Required[Path]
     app_base_url: Required[str]
-    record: NotRequired[RunRecord]
-    persona: NotRequired[DemoPersona]
-    task: NotRequired[DemoTask]
+    record: NotRequired[RunRecord]  # 目前是demo 
+    persona: NotRequired[DemoPersona]  # 目前是demo
+    task: NotRequired[DemoTask]  # 目前是demo
     session: NotRequired[dict[str, Any]]
     current_page_state: NotRequired[ObservedPageState]
     current_action: NotRequired[ActionInput]

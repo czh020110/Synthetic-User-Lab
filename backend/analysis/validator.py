@@ -10,17 +10,18 @@ from backend.schemas.run_schemas import DemoTask, ExecutionResult, ObservedPageS
 
 
 def validate_progress(
-    task: DemoTask,
-    observed_page_state: ObservedPageState,
-    execution_result: ExecutionResult,
-    previous_steps: list[StepLog],
-    current_step_index: int,
+    task: DemoTask,  # 当前任务
+    observed_page_state: ObservedPageState,  # 页面状态
+    execution_result: ExecutionResult,  # 执行结果
+    previous_steps: list[StepLog],  # 前置任务日志
+    current_step_index: int,  # 当前步数
 ) -> ValidationResult:
     """根据最小规则判断当前运行状态。"""
+    # 设置should stop的情况
 
     friction_signals: list[str] = []
 
-    if not execution_result.success:
+    if not execution_result.success:  # 动作执行失败
         friction_signals.append("action_failed")
         return ValidationResult(
             status="failed",
@@ -31,6 +32,7 @@ def validate_progress(
         )
 
     if task.success_text in observed_page_state.visible_text_summary:
+        # 任务成功文案出现在页面可见文本中
         return ValidationResult(
             status="succeeded",
             should_stop=True,
@@ -39,6 +41,7 @@ def validate_progress(
         )
 
     if observed_page_state.error_messages:
+        # 页面出现错误提示
         friction_signals.append("page_error")
         return ValidationResult(
             status="failed",
@@ -48,7 +51,9 @@ def validate_progress(
             detected_error=True,
         )
 
+    
     if current_step_index >= task.max_steps:
+        # 判断是否超过最大步数
         friction_signals.append("step_limit_reached")
         return ValidationResult(
             status="failed",
@@ -59,9 +64,11 @@ def validate_progress(
         )
 
     if previous_steps:
+        # 检查重复行为
         last_action = previous_steps[-1].decided_action
         if last_action.action == "wait" and execution_result.action == "wait":
             friction_signals.append("repeated_wait")
+            # 上一步等待且现在又等待说明出现重复等待
 
     return ValidationResult(
         status="running",
@@ -69,3 +76,4 @@ def validate_progress(
         progress_summary="任务仍在进行，继续执行下一步。",
         friction_signals=friction_signals,
     )
+    # 提交决策: 继续执行下一步

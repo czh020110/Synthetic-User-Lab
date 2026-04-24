@@ -19,11 +19,12 @@ def utc_now() -> datetime:
 
 class InMemoryRunStore:
     """管理当前进程中的 demo run 数据。"""
+    # 记录在内存的 run 记录
 
     def __init__(self) -> None:
-        self._records: dict[str, RunRecord] = {}
-        self._steps: dict[str, list[StepLog]] = {}
-        self._reports: dict[str, RunReport] = {}
+        self._records: dict[str, RunRecord] = {}  # run 的主记录
+        self._steps: dict[str, list[StepLog]] = {}  # run 的步骤列表
+        self._reports: dict[str, RunReport] = {}  # run 的最终报告
 
     def clear(self) -> None:
         """清空全部内存数据。"""
@@ -37,14 +38,15 @@ class InMemoryRunStore:
 
         self._records[record.run_id] = record
         self._steps[record.run_id] = []
-        return record.model_copy(deep=True)
+        return record.model_copy(deep=True)  # 返回深拷贝, 步直接改坏存储对象
+        # 浅拷贝:只复制值, 深拷贝:值和地址都复制
 
     def mark_running(self, run_id: str) -> RunRecord:
         """更新记录为运行中状态。"""
-
+        # 标记 run 正在运行中
         record = self._records[run_id]
-        record.status = "running"
-        record.updated_at = utc_now()
+        record.status = "running"  # 运行状态
+        record.updated_at = utc_now()  # 更新为当前的时间
         return record.model_copy(deep=True)
 
     def add_step(self, run_id: str, step: StepLog) -> StepLog:
@@ -57,30 +59,32 @@ class InMemoryRunStore:
     def complete_run(self, run_id: str, report: RunReport) -> RunRecord:
         """写入报告并标记运行成功或失败结束。"""
 
-        self._reports[run_id] = report
+        self._reports[run_id] = report  # 先保存报告
         record = self._records[run_id]
         record.status = report.status
         record.updated_at = utc_now()
-        record.error_message = None
+        if report.status == "succeeded":
+            record.error_message = None  # 成功则清理错误信息
         return record.model_copy(deep=True)
 
     def fail_run(self, run_id: str, error_message: str) -> RunRecord:
         """记录异常并标记运行失败。"""
 
         record = self._records[run_id]
-        record.status = "failed"
-        record.updated_at = utc_now()
-        record.error_message = error_message
+        record.status = "failed"  # 错误状态
+        record.updated_at = utc_now()  # 更新时间
+        record.error_message = error_message  # 错误信息
         return record.model_copy(deep=True)
 
     def get_record(self, run_id: str) -> RunRecord | None:
         """返回运行记录。"""
 
-        record = self._records.get(run_id)
+        record = self._records.get(run_id)  # 读取某个 run 的主记录
         return record.model_copy(deep=True) if record else None
 
     def get_status(self, run_id: str) -> RunStatusResponse | None:
         """返回运行状态摘要。"""
+        # 步返回完整步骤和报告
 
         record = self._records.get(run_id)
         if record is None:
@@ -107,5 +111,6 @@ class InMemoryRunStore:
         report = self._reports.get(run_id)
         return report.model_copy(deep=True) if report else None
 
-
-run_store = InMemoryRunStore()
+# model_copy复制模型对象pydantic, 用来:复制但需要修改,只复制的情况
+# 用于返回一个完全独立的副本, 调用方法修改这个返回值不会直接影响保存的原始报告
+run_store = InMemoryRunStore()  # 全局共享存储单例

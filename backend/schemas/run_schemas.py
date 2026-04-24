@@ -30,6 +30,7 @@ class ApiResponse(BaseModel):
     message: str = "ok"
     data: Any | None = None
 
+# ========= Demo require========== #
 
 class DemoPersona(BaseModel):
     """描述当前 demo 使用的固定 persona。"""
@@ -37,10 +38,9 @@ class DemoPersona(BaseModel):
     id: str = "demo-persona-newbie"
     name: str = "新手体验用户"
     description: str = "会按照页面主路径逐步完成任务，不进行高风险操作。"
-    skill_level: str = "newbie"
-    patience_level: str = "medium"
-    risk_preference: str = "low"
-
+    skill_level: str = "newbie"  # 用户熟练度，newbie 表示新手型用户。
+    patience_level: str = "medium"  # 用户耐心程度，medium 表示遇到小问题会继续尝试。
+    risk_preference: str = "low"  # 用户风险偏好，low 表示倾向安全操作，不主动尝试高风险动作。
 
 class DemoTask(BaseModel):
     """描述当前 demo 使用的固定任务。"""
@@ -53,8 +53,9 @@ class DemoTask(BaseModel):
     max_steps: int = 8
     allowed_actions: list[ActionName] = Field(default_factory=lambda: ["navigate", "click", "fill", "wait"])
     risk_level: str = "low"
-    destructive_action_allowed: bool = False
+    destructive_action_allowed: bool = False  # 是否允许执行"破坏性动作":删除/提交/发布/支付等
 
+# ========= Demo require========== #
 
 class RunRequest(BaseModel):
     """定义启动 demo run 的请求体。"""
@@ -62,15 +63,15 @@ class RunRequest(BaseModel):
     run_name: str = "demo-run"
     expected_user_name: str = "Synthetic User"
     expected_email: str = "synthetic.user@example.com"
-    headless: bool | None = None
-    operator_note: str = ""
+    headless: bool | None = None  # 是否无头浏览器模式，None系统默认,True不打开浏览器,后台跑, False打开浏览器窗口
+    operator_note: str = ""  # 操作人备注, 附加我额外说明
 
 
 class ObservedElement(BaseModel):
     """描述可交互元素摘要。"""
 
-    text: str = ""
-    selector: str = ""
+    text: str = ""  # 元素上显示的文本(如按钮文本)
+    selector: str = ""  # 元素的 CSS 选择器路径, 定位信息
 
 
 class FormFieldState(BaseModel):
@@ -78,91 +79,91 @@ class FormFieldState(BaseModel):
 
     name: str = ""
     selector: str = ""
-    value: str = ""
+    value: str = ""  # 该字段当前的值(已填)
 
 
 class ObservedPageState(BaseModel):
     """描述页面观察结果。"""
 
-    current_url: str
-    title: str
-    visible_text_summary: str
-    clickable_elements: list[ObservedElement] = Field(default_factory=list)
-    form_fields: list[FormFieldState] = Field(default_factory=list)
-    error_messages: list[str] = Field(default_factory=list)
+    current_url: str  # 页面URL
+    title: str  # 页面标题
+    visible_text_summary: str  # 页面可见文本摘要
+    clickable_elements: list[ObservedElement] = Field(default_factory=list)  # 页面上可点击元素列表
+    form_fields: list[FormFieldState] = Field(default_factory=list)  # 页面上表单字段列表
+    error_messages: list[str] = Field(default_factory=list)  # 页面上检测到的错误信息列表，如表单验证错误、加载失败等
 
 
 class ActionInput(BaseModel):
     """描述下一步受控动作。"""
 
-    action: ActionName
-    target: str
-    value: str | None = None
-    reason: str = ""
+    action: ActionName  # "navigate", "click"...
+    target: str  # 动作目标元素
+    value: str | None = None  # 动作附带值(非所有动作都需要,例如: fill 需要填内容, click 点击不需要)
+    reason: str = ""  # 执行动作的原因
 
 
 class ExecutionResult(BaseModel):
     """描述动作执行结果。"""
 
-    action: ActionName
-    success: bool
-    detail: str
-    screenshot_path: str | None = None
-    current_url_after_action: str | None = None
-    error_message: str | None = None
+    action: ActionName  # 实际执行动作:click/fill/navagate...
+    success: bool  # 是否执行成功?
+    detail: str  # 执行结果的文字说明
+    screenshot_path: str | None = None  # 本次动作后的截图路径
+    current_url_after_action: str | None = None  # 执行完成后的URL(用于确认页面是否成功跳转)
+    error_message: str | None = None  # 执行失败的错误信息
 
 
 class ValidationResult(BaseModel):
-    """描述当前步骤的验证结论。"""
+    """描述当前步骤的验证结论。"""  # 描述本次动作的执行结果
 
-    status: ValidationStatus
-    should_stop: bool
-    progress_summary: str
-    friction_signals: list[str] = Field(default_factory=list)
-    detected_success: bool = False
-    detected_error: bool = False
+    status: ValidationStatus  # 当前验证状态(running/succeded/failed)
+    should_stop: bool  # 判断: 是否需要停止
+    progress_summary: str  # 本次推进的文字总结
+    friction_signals: list[str] = Field(default_factory=list)  # 摩擦信号列表(记录体验问题)
+    detected_success: bool = False  # 是否检测到任务成功?
+    detected_error: bool = False  # 是否检测到任务失败?
 
 
 class StepLog(BaseModel):
-    """描述单步执行日志。"""
+    """描述单步执行日志。"""  # 记录每步的执行步骤序号/页面观察结果/执行的动作/动作执行的结果/动作的验证结论
 
-    step_index: int
-    observed_page_state: ObservedPageState
-    decided_action: ActionInput
-    execution_result: ExecutionResult
-    validation_result: ValidationResult
+    step_index: int  # 步骤编号1/2/3
+    observed_page_state: ObservedPageState  # 页面观察结果(页面快照)
+    decided_action: ActionInput  # 动作输入(准备做什么)
+    execution_result: ExecutionResult  # 动作执行结果
+    validation_result: ValidationResult  # 动作验证结果
 
 
 class RunReport(BaseModel):
     """描述最终 run 报告。"""
 
-    run_id: str
-    status: RunStatus
-    summary: str
-    success: bool
-    persona: DemoPersona
-    task: DemoTask
-    total_steps: int
-    friction_signals: list[str] = Field(default_factory=list)
-    key_findings: list[str] = Field(default_factory=list)
-    next_recommendations: list[str] = Field(default_factory=list)
+    run_id: str  # 单次run的唯一id
+    status: RunStatus  # run 的最终状态 
+    summary: str  # run的文字总结 
+    success: bool # run 是否成功
+    persona: DemoPersona  # 使用的是哪个人格
+    task: DemoTask  # run 执行的是哪个任务
+    total_steps: int  # 总步数
+    friction_signals: list[str] = Field(default_factory=list)  # run 中的摩擦信号列表
+    key_findings: list[str] = Field(default_factory=list)  # run 的关键发现
+    next_recommendations: list[str] = Field(default_factory=list)  # 本次run 的后续建议
 
 
 class RunRecord(BaseModel):
     """描述内存中的运行记录。"""
 
     run_id: str = Field(default_factory=lambda: str(uuid4()))
-    status: RunStatus = "queued"
-    request: RunRequest
-    persona: DemoPersona
-    task: DemoTask
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now)
-    error_message: str | None = None
+    status: RunStatus = "queued"  # run 的运行状态:queued/running/succeeded/failed
+    request: RunRequest  # 启动run的请求体内容
+    persona: DemoPersona  # 使用的人格
+    task: DemoTask  # run 任务
+    created_at: datetime = Field(default_factory=utc_now)  # 创建时间
+    updated_at: datetime = Field(default_factory=utc_now)  # 更新时间
+    error_message: str | None = None  # 报错消息
 
 
 class RunStatusResponse(BaseModel):
-    """描述运行状态接口返回值。"""
+    """描述运行状态接口返回值。"""  # 与RunRecord差不多,但是是给前端使用(非内部调用)
 
     run_id: str
     status: RunStatus

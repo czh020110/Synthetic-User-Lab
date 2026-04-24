@@ -7,14 +7,16 @@ from __future__ import annotations
 # 模块接口说明: get_settings() 返回全局配置对象
 
 import os
-from functools import lru_cache
+from functools import lru_cache  # 给 get_settings() 做缓存，避免重复创建配置对象
 from pathlib import Path
 
 from pydantic import BaseModel
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(__file__).resolve().parents[2]  # 计算根项目绝对路径(0当前父目录,1往上.2再往上)
+# 等价于:BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# /backend/core/config.py
 
-
+# 系统或脚本或编辑器ide的环境变量
 class Settings(BaseModel):
     """保存当前项目运行所需的最小配置。"""
 
@@ -30,11 +32,12 @@ class Settings(BaseModel):
     screenshot_dir: Path = BASE_DIR / "screenshots"
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=1)  # 进程只保留一个settings实例
 def get_settings() -> Settings:
     """返回全局配置对象。"""
 
     settings = Settings()
-    settings.demo_site_dir.mkdir(parents=True, exist_ok=True)
-    settings.screenshot_dir.mkdir(parents=True, exist_ok=True)
+    # .mkdir: pathlib.Path 对象的方法
+    settings.demo_site_dir.mkdir(parents=True, exist_ok=True)  # 确保demo目录存在
+    settings.screenshot_dir.mkdir(parents=True, exist_ok=True)  # 确保截图目录存在
     return settings

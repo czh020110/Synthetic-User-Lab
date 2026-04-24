@@ -15,10 +15,10 @@ async def observe_page(page: Any) -> ObservedPageState:
     """返回当前页面的结构化观察结果。"""
 
     title = await page.title()
-    visible_text = await page.evaluate(
+    visible_text = await page.evaluate(  # 提取页面可见文本 
         r"() => (document.body?.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 600)"
     )
-    clickable_elements = await page.evaluate(
+    clickable_elements = await page.evaluate(  # 提取页面可点击元素
         """
         () => Array.from(document.querySelectorAll('button, a, [role="button"]'))
             .filter((element) => !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length))
@@ -31,7 +31,7 @@ async def observe_page(page: Any) -> ObservedPageState:
             }))
         """
     )
-    form_fields = await page.evaluate(
+    form_fields = await page.evaluate(  # 提取表单字段
         """
         () => Array.from(document.querySelectorAll('input, textarea, select'))
             .slice(0, 10)
@@ -44,7 +44,7 @@ async def observe_page(page: Any) -> ObservedPageState:
             }))
         """
     )
-    error_messages = await page.evaluate(
+    error_messages = await page.evaluate(  # 提取错误信息
         """
         () => Array.from(document.querySelectorAll('.error-message, [role="alert"], [data-error="true"]'))
             .filter((element) => !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length))
@@ -54,7 +54,7 @@ async def observe_page(page: Any) -> ObservedPageState:
         """
     )
 
-    return ObservedPageState(
+    return ObservedPageState(  # 返回观察信息
         current_url=page.url,
         title=title,
         visible_text_summary=visible_text,

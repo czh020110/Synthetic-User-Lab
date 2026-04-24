@@ -1,1 +1,48 @@
+# IDE
 .vscode/
+.idea/
+
+# Python cache
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Type check / lint cache
+.mypy_cache/
+.pyright/
+.ruff_cache/
+
+# Logs
+*.log
+
+# Runtime / local data
+.env
+.env.*
+*.sqlite3
+
+# Playwright artifacts
+playwright-report/
+test-results/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.pyc

@@ -6,10 +6,10 @@ from __future__ import annotations
 # 模块数据流: HTTP 请求 -> 内存记录/后台执行 -> HTTP 响应
 # 模块接口说明: start/status/steps/report 四个接口覆盖最小 run 闭环查询面
 
-import asyncio
+import asyncio  # 异步执行
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request  # 路由、异常和请求对象
 
 from backend.core.config import get_settings
 from backend.graph.demo_run_graph import run_demo_workflow
