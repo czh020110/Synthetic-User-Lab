@@ -12,29 +12,10 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-BASE_DIR = Path(__file__).resolve().parents[2]  # 计算根项目绝对路径(0当前父目录,1往上.2再往上)
-# 等价于:BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# /backend/core/config.py
+from backend.ai_api.provider_router import load_dotenv, BASE_DIR, get_model_router
 
-def _load_dotenv(dotenv_path: Path = BASE_DIR / ".env") -> None:
-    """从项目根目录 .env 加载环境变量。"""
-
-    if not dotenv_path.exists():
-        return
-
-    for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key and key not in os.environ:
-            os.environ[key] = value
-
-
-_load_dotenv()
-
+load_dotenv()
+model_router = get_model_router()
 
 # 系统或脚本或编辑器ide的环境变量
 class Settings(BaseModel):
@@ -50,8 +31,13 @@ class Settings(BaseModel):
     run_step_limit: int = int(os.getenv("SYNTHETIC_USER_LAB_RUN_STEP_LIMIT", "8"))
     demo_site_dir: Path = BASE_DIR / "backend" / "fixtures" / "demo_site"
     screenshot_dir: Path = BASE_DIR / "screenshots"
-
-
+    # openai模型配置
+    custom_system_prompt : str = os.getenv("CUSTOM_SYSTEM_PROMPT", "")
+    model_provider : str = model_router.model_provider
+    base_url: str = model_router.base_url
+    api_key: str = model_router.api_key
+    model_name: str = model_router.model_name
+    
 @lru_cache(maxsize=1)  # 进程只保留一个settings实例
 def get_settings() -> Settings:
     """返回全局配置对象。"""

@@ -8,26 +8,75 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-
+from typing import Any, cast
+from pydantic import SecretStr
 from langgraph.graph import END, START, StateGraph
+from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
+from langgraph.checkpoint.memory import InMemorySaver
+checkpointer = InMemorySaver()
 
 from backend.analysis.report_builder import build_run_report  # 生成最终的运行报告
-from backend.analysis.validator import validate_progress  # 判断(验证)当前步骤是否成功/失败/还是需要继续运行
 from backend.core.config import get_settings  # 读取全局配置
+settings = get_settings()
+
 from backend.execution.observer import observe_page  # 观察到的页面结果
 from backend.execution.playwright_adapter import close_browser_session, create_browser_session, execute_action  # playwright 执行动作(浏览器)
 from backend.graph.run_state import DemoRunState  # LangGraph 使用的状态类型
-from backend.schemas.run_schemas import ActionInput, DemoPersona, DemoTask, RunRecord, RunRequest, StepLog  # 关键结构schema
+from backend.schemas.run_schemas import ActionInput, DemoPersona, DemoTask, RunRecord, RunRequest, StepLog, ValidationResult  # 关键结构schema
 from backend.stores.in_memory_run_store import run_store  # 存放在内存的记录和摘要(内存运行存储实例)
 
+from graph_prompt import decide, decide_input, validate, validate_input
+
 logger = logging.getLogger(__name__)
+
+# ===== 创建agent ===== #
+decide_input_prompt = ChatPromptTemplate.from_messages(
+    [
+        ("user",decide_input)
+    ]
+)
+validate_input_prompt = ChatPromptTemplate.from_messages(
+    [
+        ("user", validate_input)
+    ]
+)
+
+if settings.model_provider == "openai":
+    from langchain_openai import ChatOpenAI
+    model = ChatOpenAI(
+        model=settings.model_name,
+        api_key=SecretStr(settings.api_key) if settings.api_key else None,
+        base_url=settings.base_url or None,
+    )
+elif settings.model_provider == "dashscope":
+    from langchain_community.chat_models.tongyi import ChatTongyi
+    model = ChatTongyi(
+        model=settings.model_name,
+        api_key=SecretStr(settings.api_key) if settings.api_key else None,
+    )
+
+decide_agent = create_agent(
+    model=model,
+    tools=[],
+    checkpointer=checkpointer,
+    system_prompt=decide,
+    response_format=ActionInput
+)
+validate_agent = create_agent(
+    model=model,
+    tools=[],
+    checkpointer=checkpointer,
+    system_prompt=validate,
+    response_format=ValidationResult
+)
+# =============== #
 
 # graph中的第一个业务节点, 初始化上下文
 async def load_demo_context(state: DemoRunState) -> dict:
     """加载固定 demo persona 与 task。"""
     # 使用固定demo配置跑通闭环, 加载demo的人格
 
-    settings = get_settings()
     start_url = f"{state['app_base_url']}/demo/index.html"
     persona = DemoPersona()
     task = DemoTask(start_url=start_url, max_steps=settings.run_step_limit)
@@ -55,7 +104,6 @@ async def init_session(state: DemoRunState) -> dict:
     """创建浏览器会话并进入起始页面。"""
 
     request = state["request"]
-    settings = get_settings()
     headless = settings.browser_headless if request.headless is None else request.headless
     logger.info("initializing run session, run_id=%s headless=%s", state["run_id"], headless)
     session = await create_browser_session(headless=headless)  # playwright会话
@@ -79,7 +127,7 @@ async def observe_current_page(state: DemoRunState) -> dict:
     return {"current_page_state": page_state}
     # 返回ObservedPageState对象,存放在current_page_state里面,即页面观察信息
 
-def decide_next_action(state: DemoRunState) -> dict:
+async def decide_next_action(state: DemoRunState) -> dict:
     """根据当前页面状态选择下一步受控动作。"""
 
     page_state = state.get("current_page_state")
@@ -91,17 +139,24 @@ def decide_next_action(state: DemoRunState) -> dict:
     clickable_selectors = {element.selector for element in page_state.clickable_elements}
     form_field_values = {field.selector: field.value for field in page_state.form_fields}
 
-    action: ActionInput
-    if "#start-demo" in clickable_selectors:
-        action = ActionInput(action="click", target="#start-demo", reason="进入 demo 表单页面。")
-    elif form_field_values.get("#user-name", "") == "":  # 固定字段,看到user-name就填写
-        action = ActionInput(action="fill", target="#user-name", value=request.expected_user_name, reason="先填写用户名。")
-    elif form_field_values.get("#user-email", "") == "":  # 固定字段,看到use-wmail就填写
-        action = ActionInput(action="fill", target="#user-email", value=request.expected_email, reason="继续填写邮箱。")
-    elif "#submit-demo" in clickable_selectors:  # 点击提交按钮
-        action = ActionInput(action="click", target="#submit-demo", reason="表单已完整，执行提交。")
-    else:
-        action = ActionInput(action="wait", target="page", value="300", reason="等待页面状态稳定。")
+    persona = state.get("persona")
+    task = state.get("task")
+    if persona is None or task is None:
+        raise ValueError("Persona or task is missing before action decision.")
+
+    agent_messages = decide_input_prompt.format_messages(
+        persona=persona.model_dump_json(indent=2),  # indent=2是
+        task=task.model_dump_json(indent=2),
+        request=request.model_dump_json(indent=2),
+        current_page_state=page_state.model_dump_json(indent=2),
+        clickable_selectors=sorted(clickable_selectors),
+        form_field_values=form_field_values,
+        previous_steps=[step.model_dump(mode="json") for step in state.get("step_logs", [])],
+        previous_steps_count=len(state.get("step_logs", [])),
+    )
+    agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:decide"}}
+    response = await decide_agent.ainvoke(cast(Any, {"messages": agent_messages}), config=agent_config)
+    action = ActionInput.model_validate(response["structured_response"])
 
     return {"current_action": action}
 
@@ -135,13 +190,18 @@ async def validate_current_progress(state: DemoRunState) -> dict:
 
     page = session["page"]
     page_state = await observe_page(page)
-    validation = validate_progress(
-        task=task,
-        observed_page_state=page_state,
-        execution_result=execution_result,
-        previous_steps=state.get("step_logs", []),
-        current_step_index=state.get("current_step_index", 0) + 1,
+    current_step_index = state.get("current_step_index", 0) + 1
+    agent_messages = validate_input_prompt.format_messages(
+        task=task.model_dump_json(indent=2),  # 不加indnet=2默认紧凑模式,加了后美观格式的json,有2空格开头每行,以及换行
+        latest_page_state=page_state.model_dump_json(indent=2),
+        execution_result=execution_result.model_dump_json(indent=2),
+        previous_steps=[step.model_dump(mode="json") for step in state.get("step_logs", [])],
+        current_step_index=current_step_index,
+        max_steps=task.max_steps,
     )
+    agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:validate"}}
+    response = await validate_agent.ainvoke(cast(Any, {"messages": agent_messages}), config=agent_config)
+    validation = ValidationResult.model_validate(response["structured_response"])  # agent 格式化输出的字段存放在"structured_response"中
     return {
         "current_page_state": page_state,
         "current_validation_result": validation,
@@ -204,9 +264,9 @@ def build_demo_run_graph():
     workflow.add_node("load_demo_context", load_demo_context)
     workflow.add_node("init_session", init_session)
     workflow.add_node("observe_page", observe_current_page)
-    workflow.add_node("decide_action", decide_next_action)
+    workflow.add_node("decide_action", decide_next_action)  # agent
     workflow.add_node("execute_action", execute_current_action)
-    workflow.add_node("validate_progress", validate_current_progress)
+    workflow.add_node("validate_progress", validate_current_progress)  # agent
     workflow.add_node("log_step", log_current_step)
     workflow.add_node("finalize_report", finalize_report)
 
