@@ -43,6 +43,7 @@ def get_settings() -> Settings:
     """返回全局配置对象。"""
 
     settings = Settings()
+    settings.api_prefix = settings.api_prefix if settings.api_prefix.startswith("/") else f"/{settings.api_prefix}"
     # .mkdir: pathlib.Path 对象的方法
     settings.demo_site_dir.mkdir(parents=True, exist_ok=True)  # 确保demo目录存在
     settings.screenshot_dir.mkdir(parents=True, exist_ok=True)  # 确保截图目录存在

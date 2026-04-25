@@ -1,9 +1,11 @@
 from fastapi.testclient import TestClient
 
+from backend.core.config import get_settings
 from backend.main import app
 from backend.stores.in_memory_run_store import run_store
 
 client = TestClient(app)
+api_prefix = get_settings().api_prefix
 
 
 def setup_function() -> None:
@@ -11,18 +13,16 @@ def setup_function() -> None:
 
 
 def test_health_check() -> None:
-    response = client.get("/api/v1/runs/demo/health")
+    response = client.get(f"{api_prefix}/runs/demo/health")
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "ok"
 
 
 def test_start_demo_run_returns_run_id() -> None:
     response = client.post(
-        "/api/v1/runs/demo/start",
+        f"{api_prefix}/runs/demo/start",
         json={
             "run_name": "demo",
-            "expected_user_name": "Test User",
-            "expected_email": "test@example.com",
             "headless": True,
         },
     )

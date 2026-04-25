@@ -47,25 +47,22 @@ class DemoTask(BaseModel):
 
     id: str = "demo-task-onboarding"
     name: str = "完成体验引导表单"
-    description: str = "进入 demo 页面，打开表单，填写信息并完成提交。"
+    description: str = "进入 demo 页面，像新用户一样理解页面并完成体验引导表单；如页面要求填写姓名和邮箱，可自行生成合理的测试姓名和测试邮箱。"
     start_url: str
-    success_text: str = "提交成功"
+    success_criteria: list[str] = Field(default_factory=lambda: ["提交成功"])
     max_steps: int = 8
     allowed_actions: list[ActionName] = Field(default_factory=lambda: ["navigate", "click", "fill", "wait"])
     risk_level: str = "low"
     destructive_action_allowed: bool = False  # 是否允许执行"破坏性动作":删除/提交/发布/支付等
 
-# ========= Demo require========== #
 
 class RunRequest(BaseModel):
     """定义启动 demo run 的请求体。"""
 
     run_name: str = "demo-run"
-    expected_user_name: str = "Synthetic User"
-    expected_email: str = "synthetic.user@example.com"
     headless: bool | None = None  # 是否无头浏览器模式，None系统默认,True不打开浏览器,后台跑, False打开浏览器窗口
-    operator_note: str = ""  # 操作人备注, 附加我额外说明
 
+# ========= Demo require========== #
 
 class ObservedElement(BaseModel):
     """描述可交互元素摘要。"""

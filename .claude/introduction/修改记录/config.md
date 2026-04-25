@@ -1,5 +1,13 @@
 # config
 
+## 规范化 api_prefix 确保 FastAPI 路由前缀合法(最新修改)
+
+- 修改的文件名和路径：`backend/core/config.py`
+- 修改前存在的问题（修改代码）：当 `.env` 或系统环境变量中的 `SYNTHETIC_USER_LAB_API_PREFIX` 缺少开头 `/` 时，FastAPI `include_router` 会因前缀不合法而在应用导入阶段报错。
+- 添加前未完成的功能（新增代码）：缺少对 API 前缀格式的最小规范化处理。
+- 如何修复的（关键修改点说明）：在 `get_settings()` 创建 `Settings` 后，若 `api_prefix` 不以 `/` 开头，则补齐开头 `/`。
+- 修改后的预期功能或修复后的预测结果：本地 `.env` 中即使写入 `api/v1`，运行时也会规范化为 `/api/v1`，避免 FastAPI 路由注册失败。
+
 ## 支持从项目根目录 .env 加载运行配置 (最新修改)
 
 - 修改的文件名和路径：`backend/core/config.py`

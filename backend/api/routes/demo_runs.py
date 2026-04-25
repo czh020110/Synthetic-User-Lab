@@ -49,7 +49,7 @@ async def start_demo_run(request: Request, payload: RunRequest) -> ApiResponse:
             name="pending",
             description="run 尚未进入 task 加载阶段。",
             start_url=f"{app_base_url}/demo/index.html",
-            success_text="提交成功",
+            success_criteria=["页面出现提交成功文案"],
             max_steps=settings.run_step_limit,
         ),
     )

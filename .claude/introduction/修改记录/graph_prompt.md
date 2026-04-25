@@ -1,5 +1,29 @@
 # graph_prompt
 
+## 统一 system prompt 与动态 prompt 的占位符职责(最新修改)
+
+- 修改的文件名和路径(单个文档只写一次):
+  - `backend/graph/graph_prompt.py`
+
+- 修改前存在的问题:
+  - persona/task 固定上下文没有集中定义在 prompt 模板文件中。
+  - `decide_input` / `validate_input` 曾混入固定 run 上下文，动态输入职责不够清晰。
+  - 决策 prompt 中“帮助 persona 完成任务”的表述不符合 agent 扮演 persona 的定位。
+
+- 添加前未完成的功能:
+  - 缺少带 `{persona}`、`{task}` 占位符的 decide/validate system prompt 模板。
+  - 缺少只承载动态页面事实、历史摘要和最近步骤的 step 输入模板。
+
+- 如何修复的(关键修改点说明):
+  - 在 `decide` system prompt 中加入 `{persona}`、`{task}` 占位符，并改为“扮演 persona”。
+  - 在 `validate` system prompt 中加入 `{persona}`、`{task}` 占位符。
+  - 将 `decide_input` / `validate_input` 调整为只包含动态上下文。
+  - 将动作列表收敛到当前 `ActionInput` 支持的 `click`、`fill`、`wait`、`navigate`。
+
+- 修改后的预期功能或修复后的预测结果:
+  - prompt 模板结构更清晰：system prompt 管固定 persona/task 和规则，input prompt 管每步动态事实。
+  - 后续新增 persona/task 时只需在 run 初始化阶段填充模板。
+
 ## 为 decide agent 输入补充历史步骤详情(最新修改)
 
 - 修改的文件名和路径(单个文档只写一次):

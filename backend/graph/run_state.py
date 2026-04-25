@@ -41,4 +41,6 @@ class DemoRunState(TypedDict):  # 目前是demo
     step_logs: NotRequired[list[StepLog]]
     current_step_index: NotRequired[int]
     should_stop: NotRequired[bool]
+    decide_agent: NotRequired[Any]
+    validate_agent: NotRequired[Any]
     report: NotRequired[RunReport]

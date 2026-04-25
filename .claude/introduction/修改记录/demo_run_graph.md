@@ -1,5 +1,29 @@
 # demo_run_graph
 
+## 将 persona/task 固定上下文注入 run 级 agent system prompt(最新修改)
+
+- 修改的文件名和路径(单个文档只写一次):
+  - `backend/graph/demo_run_graph.py`
+
+- 修改前存在的问题:
+  - persona/task 固定上下文曾混在动态输入 prompt 或本文件的临时拼接函数中，prompt 模板职责不够集中。
+  - 若在决策/验证节点内部创建 agent，会导致每步重复创建 agent。
+
+- 添加前未完成的功能:
+  - 缺少每个 run 初始化时基于当前 persona/task 创建一次 decide/validate agent 的能力。
+  - 动态节点输入未清晰区分固定 system prompt 与每步页面上下文。
+
+- 如何修复的(关键修改点说明):
+  - 从 `backend.graph.graph_prompt` 导入 system prompt 模板和动态输入模板。
+  - 使用 `ChatPromptTemplate.from_template()` 管理 `decide` / `validate` system prompt 中的 persona/task 占位符。
+  - 在 `load_demo_context` 中为当前 run 创建 `decide_agent` 与 `validate_agent`，并写入 graph state。
+  - `decide_next_action` 与 `validate_current_progress` 只读取 state 中的 agent，并仅传入动态页面状态、历史摘要和最近步骤。
+
+- 修改后的预期功能或修复后的预测结果:
+  - 每个 run 的 persona/task 固定上下文只在 run 级 agent system prompt 中注入。
+  - 每个 run 只创建一次 decide/validate agent，避免节点循环中重复创建。
+  - 每步 prompt 只承载动态上下文，职责更清晰。
+
 ## 按 run_id 区分 agent checkpointer 并显式传入历史步骤(最新修改)
 
 - 修改的文件名和路径(单个文档只写一次):

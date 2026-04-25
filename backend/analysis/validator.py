@@ -31,8 +31,8 @@ def validate_progress(
             detected_error=True,
         )
 
-    if task.success_text in observed_page_state.visible_text_summary:
-        # 任务成功文案出现在页面可见文本中
+    if any(criteria in observed_page_state.visible_text_summary for criteria in task.success_criteria):
+        # 任务成功条件出现在页面可见文本中
         return ValidationResult(
             status="succeeded",
             should_stop=True,

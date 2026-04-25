@@ -26,16 +26,30 @@ from backend.graph.run_state import DemoRunState  # LangGraph 使用的状态类
 from backend.schemas.run_schemas import ActionInput, DemoPersona, DemoTask, RunRecord, RunRequest, StepLog, ValidationResult  # 关键结构schema
 from backend.stores.in_memory_run_store import run_store  # 存放在内存的记录和摘要(内存运行存储实例)
 
-from graph_prompt import decide, decide_input, validate, validate_input
+from backend.graph.graph_prompt import decide, decide_input, validate, validate_input
 
 logger = logging.getLogger(__name__)
 
+
+def build_history_summary(step_logs: list[StepLog]) -> str:
+    if not step_logs:
+        return "暂无历史步骤。"
+    return "\n".join(
+        f"第{step.step_index}步: 动作={step.decided_action.action} 目标={step.decided_action.target} "
+        f"执行成功={step.execution_result.success} 验证状态={step.validation_result.status} "
+        f"总结={step.validation_result.progress_summary}"
+        for step in step_logs
+    )
+
+
 # ===== 创建agent ===== #
+decide_system_prompt = ChatPromptTemplate.from_template(decide)
 decide_input_prompt = ChatPromptTemplate.from_messages(
     [
         ("user",decide_input)
     ]
 )
+validate_system_prompt = ChatPromptTemplate.from_template(validate)
 validate_input_prompt = ChatPromptTemplate.from_messages(
     [
         ("user", validate_input)
@@ -56,20 +70,6 @@ elif settings.model_provider == "dashscope":
         api_key=SecretStr(settings.api_key) if settings.api_key else None,
     )
 
-decide_agent = create_agent(
-    model=model,
-    tools=[],
-    checkpointer=checkpointer,
-    system_prompt=decide,
-    response_format=ActionInput
-)
-validate_agent = create_agent(
-    model=model,
-    tools=[],
-    checkpointer=checkpointer,
-    system_prompt=validate,
-    response_format=ValidationResult
-)
 # =============== #
 
 # graph中的第一个业务节点, 初始化上下文
@@ -89,11 +89,34 @@ async def load_demo_context(state: DemoRunState) -> dict:
         record.persona = persona
         record.task = task
 
+    decide_agent = create_agent(
+        model=model,
+        tools=[],
+        checkpointer=checkpointer,
+        system_prompt=decide_system_prompt.format(
+            persona=persona.model_dump_json(indent=2),
+            task=task.model_dump_json(indent=2),
+        ),
+        response_format=ActionInput
+    )
+    validate_agent = create_agent(
+        model=model,
+        tools=[],
+        checkpointer=checkpointer,
+        system_prompt=validate_system_prompt.format(
+            persona=persona.model_dump_json(indent=2),
+            task=task.model_dump_json(indent=2),
+        ),
+        response_format=ValidationResult
+    )
+
     run_store.mark_running(record.run_id)
     return {
         "persona": persona,
         "task": task,
         "record": record,
+        "decide_agent": decide_agent,
+        "validate_agent": validate_agent,
         "step_logs": [],
         "current_step_index": 0,
         "should_stop": False,
@@ -133,8 +156,6 @@ async def decide_next_action(state: DemoRunState) -> dict:
     page_state = state.get("current_page_state")
     if page_state is None:
         raise ValueError("Page state is missing before action decision.")
-    request = state["request"]
-
     # ObservedPageState对象里的可点击元素和表单元素
     clickable_selectors = {element.selector for element in page_state.clickable_elements}
     form_field_values = {field.selector: field.value for field in page_state.form_fields}
@@ -144,16 +165,18 @@ async def decide_next_action(state: DemoRunState) -> dict:
     if persona is None or task is None:
         raise ValueError("Persona or task is missing before action decision.")
 
+    step_logs = state.get("step_logs", [])
     agent_messages = decide_input_prompt.format_messages(
-        persona=persona.model_dump_json(indent=2),  # indent=2是
-        task=task.model_dump_json(indent=2),
-        request=request.model_dump_json(indent=2),
         current_page_state=page_state.model_dump_json(indent=2),
         clickable_selectors=sorted(clickable_selectors),
         form_field_values=form_field_values,
-        previous_steps=[step.model_dump(mode="json") for step in state.get("step_logs", [])],
-        previous_steps_count=len(state.get("step_logs", [])),
+        history_summary=build_history_summary(step_logs),
+        recent_steps=[step.model_dump(mode="json") for step in step_logs[-3:]],
+        previous_steps_count=len(step_logs),
     )
+    decide_agent = state.get("decide_agent")
+    if decide_agent is None:
+        raise ValueError("Decide agent is missing before action decision.")
     agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:decide"}}
     response = await decide_agent.ainvoke(cast(Any, {"messages": agent_messages}), config=agent_config)
     action = ActionInput.model_validate(response["structured_response"])
@@ -191,14 +214,21 @@ async def validate_current_progress(state: DemoRunState) -> dict:
     page = session["page"]
     page_state = await observe_page(page)
     current_step_index = state.get("current_step_index", 0) + 1
+    persona = state.get("persona")
+    if persona is None:
+        raise ValueError("Persona is missing before progress validation.")
+    step_logs = state.get("step_logs", [])
     agent_messages = validate_input_prompt.format_messages(
-        task=task.model_dump_json(indent=2),  # 不加indnet=2默认紧凑模式,加了后美观格式的json,有2空格开头每行,以及换行
         latest_page_state=page_state.model_dump_json(indent=2),
         execution_result=execution_result.model_dump_json(indent=2),
-        previous_steps=[step.model_dump(mode="json") for step in state.get("step_logs", [])],
+        history_summary=build_history_summary(step_logs),
+        recent_steps=[step.model_dump(mode="json") for step in step_logs[-3:]],
         current_step_index=current_step_index,
         max_steps=task.max_steps,
     )
+    validate_agent = state.get("validate_agent")
+    if validate_agent is None:
+        raise ValueError("Validate agent is missing before progress validation.")
     agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:validate"}}
     response = await validate_agent.ainvoke(cast(Any, {"messages": agent_messages}), config=agent_config)
     validation = ValidationResult.model_validate(response["structured_response"])  # agent 格式化输出的字段存放在"structured_response"中
