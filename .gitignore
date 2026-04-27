@@ -48,3 +48,6 @@ Thumbs.db
 *.pyc
 
 screenshots/
+
+.claude/settings.local.json
+.claude/.cache/
