@@ -33,6 +33,9 @@ model: sonnet
 ## 固定文档路径
 
 - 只读项目文档：`introduction/项目文档/` (用户管理,除非用户要求,不要更新此目录)
+
+  根据实际情况需要更新以下文件:
+
 - 目标边界：`introduction/项目实现目标/目标边界.md`
 - 项目目标：`introduction/项目实现目标/项目目标.md`
 - 本地环境：`introduction/环境说明/本地开发环境.md`

@@ -3,13 +3,11 @@
 # 项目环境说明
 
 项目环境: @introduction/环境说明/本地开发环境.md
+项目常见命令: @introduction/环境说明/常见命令.md
 
 ## 运行验证注意事项
 
 - 默认使用 `synthetic-user-lab` Conda 环境，避免系统 Python 缺少 Playwright 等依赖。
-- FastAPI 本地验证优先使用端口 `8765`：`python -m uvicorn backend.main:app --host 127.0.0.1 --port 8765`。
-- Windows 下如需脚本输出中文 JSON，优先直接调用环境 Python：`D:/Env/Anaconda/Anaconda3-2024.06-1/envs/synthetic-user-lab/python.exe`，避免 `conda run` 的 GBK 转码问题。
-- 复杂异步或 HTTP 轮询验证不要塞进 `python -c` 单行命令，优先使用 heredoc、临时脚本或直接环境 Python 执行。
 
 # 项目文档说明
 

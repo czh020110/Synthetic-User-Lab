@@ -18,7 +18,7 @@ def load_dotenv(dotenv_path: Path = BASE_DIR / ".env") -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        if key and key not in os.environ:
+        if key:
             os.environ[key] = value
 
 
@@ -34,7 +34,7 @@ class ModelRouter:
     def allocate_model(self):
         if self.model_provider == "openai":
             self.model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-4o")
-            self.base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+            self.base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
             self.api_key = os.getenv("OPENAI_API_KEY", "")
         elif self.model_provider == "dashscope":
             self.model_name = os.getenv("DASHSCOPE_MODEL_NAME", "qwen3.5-flash")
