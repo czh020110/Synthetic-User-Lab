@@ -10,6 +10,20 @@
     .hidden { display: none; }
     .success-message { color: #0a7a30; font-weight: bold; }
     .error-message { color: #b42318; }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      margin: 16px 0;
+      border: 4px solid #d0d5dd;
+      border-top-color: #2e90fa;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .status-message { font-weight: 600; }
+    .loading-message { color: #6941c6; }
     label { display: block; margin-top: 12px; }
     input { width: 100%; padding: 8px; margin-top: 4px; }
     button { margin-top: 16px; padding: 10px 16px; }
@@ -34,6 +48,12 @@
       <p id="form-error" class="error-message hidden" role="alert">请先完整填写所有字段。</p>
     </section>
 
+    <section id="loading-card" class="card hidden" role="status" aria-live="polite">
+      <h2>正在注册</h2>
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="status-message loading-message">正在注册，请稍候...</p>
+    </section>
+
     <section id="success-card" class="card hidden">
       <h2>提交成功</h2>
       <p class="success-message">提交成功</p>
@@ -44,6 +64,7 @@
   <script>
     const introCard = document.getElementById('intro-card');
     const formCard = document.getElementById('form-card');
+    const loadingCard = document.getElementById('loading-card');
     const successCard = document.getElementById('success-card');
     const errorText = document.getElementById('form-error');
     const nameInput = document.getElementById('user-name');
@@ -65,7 +86,12 @@
 
       errorText.classList.add('hidden');
       formCard.classList.add('hidden');
-      successCard.classList.remove('hidden');
+      loadingCard.classList.remove('hidden');
+
+      window.setTimeout(() => {
+        loadingCard.classList.add('hidden');
+        successCard.classList.remove('hidden');
+      }, 10000);
     });
   </script>
 </body>

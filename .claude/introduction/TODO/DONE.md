@@ -170,3 +170,14 @@
   - 验证方式：随本次提交验收
   - 关联修改记录：introduction/修改记录/区分模型错误并增加重试护栏.md
   - 关联 Commit：区分模型错误并增加重试护栏
+
+- [x] 2026-05-10：T-001（P0）：在 `backend/graph/run_graph.py` 中接入最小恢复分支：首次命中 `recovery_candidate` 时执行一次受控恢复动作并重新验证，同时保留恢复前后的步骤日志与最终报告收尾链路。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/接入等待观察分支以支撑恢复路径.md
+  - 关联 Commit：接入等待观察分支以支撑恢复路径
+- [x] 2026-05-10：T-002（P0）：为最小恢复分支补齐 `tests/test_validator.py`、`tests/test_demo_run_api.py` 与必要的 `tests/test_report_builder.py` 回归，确认恢复后 demo API 仍能生成包含 `conclusion` 的最终报告。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/接入等待观察分支以支撑恢复路径.md
+  - 关联 Commit：接入等待观察分支以支撑恢复路径

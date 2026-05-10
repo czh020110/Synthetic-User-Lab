@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
 from backend.core.config import get_settings
 from backend.graph.run_graph import create_run_agents, build_run_graph, run_workflow
@@ -39,7 +38,7 @@ def build_demo_task(app_base_url: str) -> Task:
     return Task(
         id="demo-task-onboarding",
         name="验证当前实现的 demo 任务",
-        description="这个 demo 只用于验证当前 run 实现是否可用：请进入 demo 页面，触发表单流程，并在页面明确显示任务完成状态后结束。",
+        description="这个 demo 用于验证当前 run 在真实页面流程中的模型决策情况：请进入 demo 页面，按照页面提示完成表单流程，并在页面明确显示任务完成状态后结束。",
         start_url=f"{app_base_url}/demo/index.html",
         success_criteria=[
             "页面明确显示任务完成状态",
@@ -76,7 +75,7 @@ async def load_demo_context(state: RunState) -> dict:
         record.persona = persona
         record.task = task
 
-    decide_agent, validate_agent = create_run_agents(persona, task)
+    decide_agent, validate_agent, wait_agent = create_run_agents(persona, task)
     run_store.mark_running(record.run_id)
     return {
         "persona": persona,
@@ -84,6 +83,7 @@ async def load_demo_context(state: RunState) -> dict:
         "record": record,
         "decide_agent": decide_agent,
         "validate_agent": validate_agent,
+        "wait_agent": wait_agent,
         "step_logs": [],
         "current_step_index": 0,
         "should_stop": False,

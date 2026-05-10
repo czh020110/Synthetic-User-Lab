@@ -103,6 +103,10 @@ def _build_base_key_findings(
     if friction_signals:
         findings.append(f"检测到摩擦信号: {', '.join(friction_signals)}。")
 
+    wait_finding = _build_wait_observation_finding(steps)
+    if wait_finding:
+        findings.append(wait_finding)
+
     first_issue_step = _find_first_issue_step(steps)
     if first_issue_step is not None:
         findings.append(
@@ -125,6 +129,20 @@ def _format_error_type(error_type: str | None) -> str:
     if error_type == "model_error":
         return "模型调用错误"
     return "系统异常中断"
+
+
+def _build_wait_observation_finding(steps: list[StepLog]) -> str:
+    wait_steps = [step for step in steps if step.wait_observation_status]
+    if not wait_steps:
+        return ""
+
+    descriptions = []
+    for step in wait_steps:
+        descriptions.append(
+            f"第 {step.step_index} 步等待观察 {step.wait_observation_observations or 0} 次，"
+            f"最终状态为 {step.wait_observation_status}，原因：{step.wait_observation_reason or '无'}"
+        )
+    return "；".join(descriptions) + "。"
 
 
 def _build_persona_impact_finding(
@@ -297,6 +315,10 @@ def _serialize_step(step: StepLog) -> dict[str, Any]:
         "validation_friction_signals": step.validation_result.friction_signals,
         "detected_success": step.validation_result.detected_success,
         "detected_error": step.validation_result.detected_error,
+        "wait_observation_status": step.wait_observation_status,
+        "wait_observation_reason": step.wait_observation_reason,
+        "wait_observation_observations": step.wait_observation_observations,
+        "wait_observation_traces": step.wait_observation_traces,
     }
 
 

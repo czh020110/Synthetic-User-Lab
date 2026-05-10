@@ -51,13 +51,19 @@ async def execute_action(page: Any, action: ActionInput, screenshot_path: Path |
 
     try:
         if action.action == "navigate":  # 跳转到目标 URL
+            if action.target is None:
+                raise ValueError("navigate action requires target.")
             await page.goto(action.target, wait_until="domcontentloaded")
         elif action.action == "click":  # 找到目标元素并点击
+            if action.target is None:
+                raise ValueError("click action requires target.")
             await page.locator(action.target).click()
         elif action.action == "fill":  # 向输入框填写
-            await page.locator(action.target).fill(action.value or "")
+            if action.target is None:
+                raise ValueError("fill action requires target.")
+            await page.locator(action.target).fill(str(action.value or ""))
         elif action.action == "wait":  # 等待一段时间
-            timeout_ms = int(action.value or "300")
+            timeout_ms = int(action.value or 300)
             await page.wait_for_timeout(timeout_ms)
         else:  # 其他不支持动作直接报错
             raise ValueError(f"Unsupported action: {action.action}")

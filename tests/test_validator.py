@@ -20,6 +20,7 @@ from backend.schemas.run_schemas import (
     Task,
     ValidationResult,
 )
+from backend.graph.wait_observer import WaitObservationResult, WaitObservationTrace
 from backend.stores.in_memory_run_store import run_store
 
 START_URL = "http://127.0.0.1:8000/demo/index.html"
@@ -79,6 +80,14 @@ def make_step(
         execution_result=execution_result,
         validation_result=validation_result,
     )
+
+
+def test_action_input_allows_wait_without_target() -> None:
+    action = ActionInput(action="wait", target=None, value=2000, reason="test")
+
+    assert action.action == "wait"
+    assert action.target is None
+    assert action.value == 2000
 
 
 def test_validate_progress_success() -> None:
@@ -162,11 +171,11 @@ def test_validate_progress_repeated_wait_requests_recovery() -> None:
 def test_validate_progress_repeated_wait_stops_after_threshold() -> None:
     task = Task(start_url=START_URL)
     previous_steps = [
-        make_step(1, action="wait", target="body"),
-        make_step(2, action="wait", target="body"),
-        make_step(3, action="wait", target="body"),
+        make_step(1, text="处理中 1", action="wait", target="body"),
+        make_step(2, text="处理中 2", action="wait", target="body"),
+        make_step(3, text="处理中 3", action="wait", target="body"),
     ]
-    page_state = make_page_state()
+    page_state = make_page_state(text="处理中 4")
     execution_result = make_execution_result("wait")
 
     result = validate_progress(
@@ -210,11 +219,11 @@ def test_validate_progress_repeated_action_target_requests_recovery() -> None:
 def test_validate_progress_repeated_action_target_stops_after_threshold() -> None:
     task = Task(start_url=START_URL)
     previous_steps = [
-        make_step(1, action="click", target="#start-demo"),
-        make_step(2, action="click", target="#start-demo"),
-        make_step(3, action="click", target="#start-demo"),
+        make_step(1, text="步骤 1", action="click", target="#start-demo"),
+        make_step(2, text="步骤 2", action="click", target="#start-demo"),
+        make_step(3, text="步骤 3", action="click", target="#start-demo"),
     ]
-    page_state = make_page_state()
+    page_state = make_page_state(text="步骤 4")
     execution_result = make_execution_result("click")
 
     result = validate_progress(
@@ -246,6 +255,31 @@ def test_validate_progress_stuck_page_requests_recovery() -> None:
         execution_result,
         previous_steps,
         3,
+        current_action=make_action("click", target="#submit-demo"),
+    )
+
+    assert result.status == "running"
+    assert result.should_stop is False
+    assert "stuck_page" in result.friction_signals
+    assert "recovery_candidate" in result.friction_signals
+
+
+def test_validate_progress_stuck_page_keeps_running_after_four_stable_steps() -> None:
+    task = Task(start_url=START_URL)
+    previous_steps = [
+        make_step(1, action="click", target="#submit-demo"),
+        make_step(2, action="click", target="#submit-demo"),
+        make_step(3, action="click", target="#submit-demo"),
+    ]
+    page_state = make_page_state(text="提交体验表单")
+    execution_result = make_execution_result("click")
+
+    result = validate_progress(
+        task,
+        page_state,
+        execution_result,
+        previous_steps,
+        4,
         current_action=make_action("click", target="#submit-demo"),
     )
 
@@ -318,6 +352,11 @@ class FakeValidateAgent:
         }
 
 
+class FailIfCalledValidateAgent:
+    async def ainvoke(self, *_args, **_kwargs):
+        raise AssertionError("validate agent should not be called")
+
+
 async def _fake_observe_page(_page):
     return make_page_state()
 
@@ -344,9 +383,146 @@ def test_validate_current_progress_applies_guardrails(monkeypatch) -> None:
     assert result["should_stop"] is True
 
 
+def test_wait_after_action_records_wait_observation(monkeypatch) -> None:
+    page_state = make_page_state(text="提交成功")
+
+    async def fake_observe_until_ready(_page, **_kwargs):
+        return WaitObservationResult(
+            "success",
+            page_state,
+            3,
+            "模型判断任务已经完成。",
+            [WaitObservationTrace(1, 0, "continue_waiting", "仍在处理中。")],
+        )
+
+    monkeypatch.setattr(run_graph, "observe_until_ready", fake_observe_until_ready)
+    state = cast(Any, {
+        "session": {"page": object()},
+        "task": Task(start_url=START_URL),
+        "persona": Persona(),
+        "wait_agent": object(),
+        "current_action": make_action("click", target="#submit-demo"),
+    })
+
+    result = asyncio.run(run_graph.wait_after_action(state))
+
+    assert result["current_page_state"] == page_state
+    assert result["wait_observation_status"] == "success"
+    assert result["wait_observation_reason"] == "模型判断任务已经完成。"
+    assert result["wait_observation_observations"] == 3
+    assert result["wait_observation_traces"] == [
+        {
+            "observation_index": 1,
+            "elapsed_ms": 0,
+            "decision": "continue_waiting",
+            "reason": "仍在处理中。",
+        }
+    ]
+
+
+def test_route_after_validate_enters_wait_on_stuck_page() -> None:
+    state = cast(Any, {
+        "current_validation_result": ValidationResult(
+            status="running",
+            should_stop=False,
+            progress_summary="继续观察",
+            friction_signals=["stuck_page", "recovery_candidate"],
+        ),
+        "should_stop": False,
+        "wait_observation_status": None,
+    })
+
+    assert run_graph.route_after_validate(state) == "wait_after_action"
+
+
+def test_route_after_validate_logs_when_wait_already_happened() -> None:
+    state = cast(Any, {
+        "current_validation_result": ValidationResult(
+            status="running",
+            should_stop=False,
+            progress_summary="继续观察",
+            friction_signals=["stuck_page", "recovery_candidate"],
+        ),
+        "should_stop": False,
+        "wait_observation_status": "actionable",
+    })
+
+    assert run_graph.route_after_validate(state) == "log_step"
+
+
+def test_validate_current_progress_skips_agent_when_wait_observe_times_out() -> None:
+    state = cast(Any, {
+        "run_id": "run-wait-timeout",
+        "session": {"page": object()},
+        "task": Task(start_url=START_URL),
+        "persona": Persona(),
+        "step_logs": [],
+        "current_step_index": 0,
+        "current_page_state": make_page_state(text="正在注册，请稍候..."),
+        "current_action": make_action("click", target="#submit-demo"),
+        "current_execution_result": make_execution_result("click"),
+        "wait_observation_status": "timeout",
+        "wait_observation_reason": "等待页面进入可继续状态超时。",
+        "validate_agent": FailIfCalledValidateAgent(),
+    })
+
+    result = asyncio.run(run_graph.validate_current_progress(state))
+
+    validation = result["current_validation_result"]
+    assert validation.status == "failed"
+    assert validation.should_stop is True
+    assert "wait_observe_timeout" in validation.friction_signals
+    assert result["should_stop"] is True
+
+
 def test_route_after_log_uses_should_stop() -> None:
     assert run_graph.route_after_log(cast(Any, {"should_stop": False})) == "observe_page"
     assert run_graph.route_after_log(cast(Any, {"should_stop": True})) == "finalize_report"
+
+
+def test_log_current_step_includes_wait_observation_details() -> None:
+    run_store.clear()
+    run_id = "run-wait-log"
+    run_store.create_run(RunRecord(run_id=run_id, request=RunRequest(), persona=Persona(), task=Task(start_url=START_URL)))
+    state = cast(Any, {
+        "run_id": run_id,
+        "current_page_state": make_page_state(text="提交成功"),
+        "current_action": make_action("click", target="#submit-demo"),
+        "current_execution_result": make_execution_result("click"),
+        "current_validation_result": ValidationResult(
+            status="succeeded",
+            should_stop=True,
+            progress_summary="完成",
+            detected_success=True,
+        ),
+        "current_step_index": 0,
+        "step_logs": [],
+        "wait_observation_status": "success",
+        "wait_observation_reason": "模型判断任务已经完成。",
+        "wait_observation_observations": 2,
+        "wait_observation_traces": [
+            {
+                "observation_index": 1,
+                "elapsed_ms": 0,
+                "decision": "continue_waiting",
+                "reason": "仍在处理中。",
+            },
+            {
+                "observation_index": 2,
+                "elapsed_ms": 2000,
+                "decision": "task_completed",
+                "reason": "已显示成功。",
+            },
+        ],
+    })
+
+    result = run_graph.log_current_step(state)
+    step = result["step_logs"][0]
+
+    assert step.wait_observation_status == "success"
+    assert step.wait_observation_reason == "模型判断任务已经完成。"
+    assert step.wait_observation_observations == 2
+    assert step.wait_observation_traces[-1]["decision"] == "task_completed"
 
 
 class FailingDecideAgent:

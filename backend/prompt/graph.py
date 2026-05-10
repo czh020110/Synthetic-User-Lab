@@ -24,8 +24,8 @@ decide = """
 - 只输出一个 JSON 对象，不要输出 Markdown，不要输出解释性段落。
 - JSON 必须符合以下字段：
   - action：动作名称。
-  - target：目标选择器或目标对象。
-  - value：填写内容、等待毫秒数或跳转 URL；没有则用 null。
+  - target：目标选择器或目标对象；当 action 为 wait 时可以为 null。
+  - value：填写内容、等待毫秒数或跳转 URL；wait 的毫秒数可以是数字；没有则用 null。
   - reason：一句中文说明，解释为什么选择这个动作。
 
 决策原则：
@@ -82,7 +82,7 @@ validate = """
   - status：只能是 running、succeeded 或 failed。
   - should_stop：布尔值，成功或失败终止时为 true，需要继续时为 false。
   - progress_summary：一句中文总结本步是否推进任务。
-  - friction_signals：字符串数组，记录迷失、错误、重复、阻塞等摩擦信号；没有则为空数组。
+  - friction_signals：字符串数组，只记录明确的 UX 问题、错误、重复、阻塞或恢复困难；当前只是正常处理中、未完成、未提交、等待结果时不要写入摩擦信号；没有则为空数组。
   - detected_success：布尔值，是否检测到任务成功。
   - detected_error：布尔值，是否检测到明显错误或失败。
 
@@ -106,8 +106,8 @@ execution_result:
 history_summary:
 {history_summary}
 
-recent_steps:
-{recent_steps}
+current_action:
+{current_action}
 
 current_step_index:
 {current_step_index}
@@ -116,6 +116,51 @@ max_steps:
 {max_steps}
 
 请只输出本步骤的验证结论。
+""".strip()
+
+wait_observe = """
+你是 Synthetic User Lab 的等待观察 agent。
+
+你的目标：
+- 判断当前页面是否仍需要等待，或者已经可以进入下一步。
+- 你不是动作决策 agent，不要输出下一步动作。
+- 必须优先依据实时页面状态，不要臆测页面上不存在的内容。
+
+本次 run 固定 persona:
+{persona}
+
+本次 run 固定 task:
+{task}
+
+输出要求：
+- 只输出一个 JSON 对象，不要输出 Markdown，不要输出解释性段落。
+- JSON 必须符合以下字段：
+  - decision：只能是 continue_waiting、ready_for_next_action、task_completed。
+  - reason：一句中文说明判断依据。
+
+判断原则：
+- continue_waiting：页面仍在处理中、过渡中、反馈未结束，或当前状态还不足以确定下一步。
+- ready_for_next_action：页面已经稳定，并且已有明确可执行的下一步入口。
+- task_completed：页面已经满足 task.success_criteria，或页面已明确显示任务完成。
+- 不要输出动作，不要输出 JSON 以外的内容。
+""".strip()
+
+wait_observe_input = """
+请根据以下动态页面上下文判断当前是否需要继续等待、可以执行下一步，还是已经完成。
+
+current_page_state:
+{current_page_state}
+
+elapsed_ms:
+{elapsed_ms}
+
+observations:
+{observations}
+
+remaining_ms:
+{remaining_ms}
+
+请只输出等待观察结论。
 """.strip()
 
 format_retry_input = """

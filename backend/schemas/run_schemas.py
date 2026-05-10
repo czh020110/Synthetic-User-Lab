@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 ActionName = Literal["navigate", "click", "fill", "wait"]
 RunStatus = Literal["queued", "running", "succeeded", "failed"]
@@ -97,9 +97,21 @@ class ActionInput(BaseModel):
     """描述下一步受控动作。"""
 
     action: ActionName  # "navigate", "click"...
-    target: str  # 动作目标元素
-    value: str | None = None  # 动作附带值(非所有动作都需要,例如: fill 需要填内容, click 点击不需要)
+    target: str | None = None  # 动作目标元素；wait 动作允许为空
+    value: str | int | None = None  # 动作附带值(非所有动作都需要,例如: fill 需要填内容, wait 可填写毫秒数)
     reason: str = ""  # 执行动作的原因
+
+    @model_validator(mode="after")
+    def _normalize_and_validate(self) -> "ActionInput":
+        if self.action in {"click", "fill", "navigate"} and not self.target:
+            raise ValueError(f"target is required for {self.action} actions.")
+        if self.action == "wait" and self.value is None:
+            self.value = 300
+        if self.action == "fill" and self.value is not None and not isinstance(self.value, str):
+            self.value = str(self.value)
+        if self.action == "wait" and self.value is not None and not isinstance(self.value, str | int):
+            self.value = str(self.value)
+        return self
 
 
 class ExecutionResult(BaseModel):
@@ -132,6 +144,10 @@ class StepLog(BaseModel):
     decided_action: ActionInput  # 动作输入(准备做什么)
     execution_result: ExecutionResult  # 动作执行结果
     validation_result: ValidationResult  # 动作验证结果
+    wait_observation_status: str | None = None  # 等待观察节点最终状态
+    wait_observation_reason: str | None = None  # 等待观察节点最终判断原因
+    wait_observation_observations: int | None = None  # 等待观察节点观察次数
+    wait_observation_traces: list[dict[str, Any]] = Field(default_factory=list)  # 每次等待观察模型判断记录
 
 
 class RunReport(BaseModel):

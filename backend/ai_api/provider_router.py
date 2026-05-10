@@ -29,15 +29,17 @@ class ModelRouter:
         self.model_provider = os.getenv("MODEL_PROVIDER", "openai")
         self.base_url = ""
         self.api_key = ""
-        self.model_name = ""
+        self.fast_model_name = ""
 
     def allocate_model(self):
         if self.model_provider == "openai":
             self.model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-4o")
+            self.fast_model_name = os.getenv("OPENAI_FAST_MODEL_NAME", "gpt-5.4-mini") or "gpt-5.4-mini"
             self.base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
             self.api_key = os.getenv("OPENAI_API_KEY", "")
         elif self.model_provider == "dashscope":
             self.model_name = os.getenv("DASHSCOPE_MODEL_NAME", "qwen3.5-flash")
+            self.fast_model_name = os.getenv("DASHSCOPE_FAST_MODEL_NAME", "qwen3.5-flash") or "qwen3.5-flash"
             self.api_key = os.getenv("DASHSCOPE_API_KEY", "")
             self.base_url = os.getenv("DASHSCOPE_BASE_URL", "")
 

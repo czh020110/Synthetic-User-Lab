@@ -37,7 +37,7 @@ class Settings(BaseModel):
     base_url: str = model_router.base_url
     api_key: str = model_router.api_key
     model_name: str = model_router.model_name
-    
+    fast_model_name: str = model_router.fast_model_name
 @lru_cache(maxsize=1)  # 进程只保留一个settings实例
 def get_settings() -> Settings:
     """返回全局配置对象。"""

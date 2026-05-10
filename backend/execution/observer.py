@@ -34,6 +34,7 @@ async def observe_page(page: Any) -> ObservedPageState:
     form_fields = await page.evaluate(  # 提取表单字段
         """
         () => Array.from(document.querySelectorAll('input, textarea, select'))
+            .filter((element) => !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length))
             .slice(0, 10)
             .map((element, index) => ({
                 name: element.getAttribute('name') || element.id || `field-${index + 1}`,

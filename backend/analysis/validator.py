@@ -67,13 +67,14 @@ def validate_progress(
     repeated_action_streak = _count_consecutive_action_target(previous_steps, current_action)
     stable_page_streak = _count_stable_page_streak(previous_steps, observed_page_state)
     off_track_streak = _count_off_track_streak(task, previous_steps, current_action, observed_page_state)
+    should_defer_to_wait_observer = stable_page_streak >= 3 and _action_can_stall(current_action)
 
     friction_signals = list(base_result.friction_signals)
     recovery_reasons: list[str] = []
 
     if wait_streak >= 3:
         friction_signals.append("repeated_wait")
-        if wait_streak >= 4:
+        if wait_streak >= 4 and not should_defer_to_wait_observer:
             return _failed_result(
                 friction_signals,
                 "连续等待多次仍无进展，结束本次运行。",
@@ -82,7 +83,7 @@ def validate_progress(
 
     if repeated_action_streak >= 3:
         friction_signals.append("repeated_action_target")
-        if repeated_action_streak >= 4:
+        if repeated_action_streak >= 4 and not should_defer_to_wait_observer:
             return _failed_result(
                 friction_signals,
                 "同一动作重复执行仍无进展，结束本次运行。",
@@ -91,16 +92,11 @@ def validate_progress(
 
     if stable_page_streak >= 3 and _action_can_stall(current_action):
         friction_signals.append("stuck_page")
-        if stable_page_streak >= 4:
-            return _failed_result(
-                friction_signals,
-                "页面连续多步没有变化，判定任务已卡住。",
-            )
-        recovery_reasons.append("页面连续多步没有变化，可考虑恢复路径。")
+        recovery_reasons.append("页面连续多步没有变化，进入等待观察以确认是否仍在处理。")
 
     if off_track_streak >= 3:
         friction_signals.append("off_track_navigation")
-        if off_track_streak >= 4:
+        if off_track_streak >= 4 and not should_defer_to_wait_observer:
             return _failed_result(
                 friction_signals,
                 "连续多步跳转或等待后仍偏离任务主路径，结束本次运行。",

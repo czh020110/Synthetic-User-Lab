@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, cast
 
@@ -23,8 +24,17 @@ from backend.analysis.validator import validate_progress
 from backend.core.config import get_settings
 from backend.execution.observer import observe_page
 from backend.execution.playwright_adapter import close_browser_session, create_browser_session, execute_action
-from backend.prompt.graph import decide, decide_input, format_retry_input, validate, validate_input
+from backend.prompt.graph import (
+    decide,
+    decide_input,
+    format_retry_input,
+    validate,
+    validate_input,
+    wait_observe,
+    wait_observe_input,
+)
 from backend.graph.run_state import RunState
+from backend.graph.wait_observer import WaitObservationDecision, WaitObservationOptions, observe_until_ready
 from backend.schemas.run_schemas import ActionInput, Persona, RunErrorType, RunRequest, StepLog, Task, ValidationResult
 from backend.stores.in_memory_run_store import run_store
 
@@ -102,30 +112,36 @@ decide_system_prompt = ChatPromptTemplate.from_template(decide)
 decide_input_prompt = ChatPromptTemplate.from_messages([("user", decide_input)])
 validate_system_prompt = ChatPromptTemplate.from_template(validate)
 validate_input_prompt = ChatPromptTemplate.from_messages([("user", validate_input)])
+wait_observe_system_prompt = ChatPromptTemplate.from_template(wait_observe)
+wait_observe_input_prompt = ChatPromptTemplate.from_messages([("user", wait_observe_input)])
 
 if not settings.api_key:
     raise ValueError("API key is required for the configured model provider.")
-if settings.model_provider == "openai":
-    from langchain_openai import ChatOpenAI
+def _create_chat_model(model_name: str) -> Any:
+    if settings.model_provider == "openai":
+        from langchain_openai import ChatOpenAI
 
-    model = ChatOpenAI(
-        model=settings.model_name,
-        api_key=SecretStr(settings.api_key) if settings.api_key else None,
-        base_url=settings.base_url,
-    )
-elif settings.model_provider == "dashscope":
-    from langchain_community.chat_models.tongyi import ChatTongyi
+        return ChatOpenAI(
+            model=model_name,
+            api_key=SecretStr(settings.api_key) if settings.api_key else None,
+            base_url=settings.base_url,
+        )
+    if settings.model_provider == "dashscope":
+        from langchain_community.chat_models.tongyi import ChatTongyi
 
-    model = ChatTongyi(
-        model=settings.model_name,
-        api_key=SecretStr(settings.api_key) if settings.api_key else None,
-    )
-else:
+        return ChatTongyi(
+            model=model_name,
+            api_key=SecretStr(settings.api_key) if settings.api_key else None,
+        )
     raise ValueError(f"Unsupported model provider: {settings.model_provider}")
 
 
-def create_run_agents(persona: Persona, task: Task) -> tuple[Any, Any]:
-    """为当前 run 创建决策与验证 agent。"""
+model = _create_chat_model(settings.model_name)
+wait_model = _create_chat_model(settings.fast_model_name or settings.model_name)
+
+
+def create_run_agents(persona: Persona, task: Task) -> tuple[Any, Any, Any]:
+    """为当前 run 创建决策、验证与等待观察 agent。"""
 
     decide_agent = create_agent(
         model=model,
@@ -147,7 +163,17 @@ def create_run_agents(persona: Persona, task: Task) -> tuple[Any, Any]:
         ),
         response_format=ValidationResult,
     )
-    return decide_agent, validate_agent
+    wait_agent = create_agent(
+        model=wait_model,
+        tools=[],
+        checkpointer=checkpointer,
+        system_prompt=wait_observe_system_prompt.format(
+            persona=persona.model_dump_json(indent=2),
+            task=task.model_dump_json(indent=2),
+        ),
+        response_format=WaitObservationDecision,
+    )
+    return decide_agent, validate_agent, wait_agent
 
 
 async def init_session(state: RunState) -> dict:
@@ -232,7 +258,82 @@ async def execute_current_action(state: RunState) -> dict:
     step_index = current_step_index + 1
     screenshot_path = Path(state["screenshot_dir"]) / state["run_id"] / f"step-{step_index}.png"
     result = await execute_action(page, action, screenshot_path=screenshot_path)
-    return {"current_execution_result": result}
+    return {
+        "current_execution_result": result,
+        "wait_observation_status": None,
+        "wait_observation_reason": None,
+        "wait_observation_observations": None,
+        "wait_observation_traces": None,
+    }
+
+
+async def wait_after_action(state: RunState) -> dict:
+    """根据等待观察模型判断是否继续等待。"""
+
+    session = state.get("session")
+    task = state.get("task")
+    wait_agent = state.get("wait_agent")
+    persona = state.get("persona")
+    if session is None or task is None or wait_agent is None or persona is None:
+        raise ValueError("Wait observation prerequisites are missing.")
+
+    page = session["page"]
+    options = WaitObservationOptions()
+
+    async def classify_fn(page_state, elapsed_ms: int, observations: int):
+        agent_messages = wait_observe_input_prompt.format_messages(
+            current_page_state=page_state.model_dump_json(indent=2),
+            elapsed_ms=elapsed_ms,
+            observations=observations,
+            remaining_ms=max(0, options.timeout_ms - elapsed_ms),
+        )
+        agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:wait"}}
+        return cast(
+            WaitObservationDecision,
+            await _invoke_agent_with_retries(
+                wait_agent,
+                agent_messages,
+                agent_config,
+                WaitObservationDecision,
+                "wait_observe",
+            ),
+        )
+
+    result = await observe_until_ready(page, classify_fn=classify_fn, options=options)
+    return {
+        "current_page_state": result.page_state,
+        "wait_observation_status": result.status,
+        "wait_observation_reason": result.reason,
+        "wait_observation_observations": result.observations,
+        "wait_observation_traces": [asdict(trace) for trace in result.traces],
+    }
+
+
+def route_after_validate(state: RunState) -> str:
+    """根据验证结果决定是否进入等待观察。"""
+
+    validation = state.get("current_validation_result")
+    if validation is None:
+        return "log_step"
+    if state.get("should_stop", False) or validation.should_stop:
+        return "log_step"
+    if state.get("wait_observation_status") is not None:
+        return "log_step"
+
+    signals = set(validation.friction_signals)
+    if "stuck_page" in signals and "recovery_candidate" in signals:
+        return "wait_after_action"
+    return "log_step"
+
+
+def _build_wait_timeout_validation(reason: str) -> ValidationResult:
+    return ValidationResult(
+        status="failed",
+        should_stop=True,
+        progress_summary=reason,
+        friction_signals=["wait_observe_timeout"],
+        detected_error=True,
+    )
 
 
 async def validate_current_progress(state: RunState) -> dict:
@@ -245,34 +346,46 @@ async def validate_current_progress(state: RunState) -> dict:
         raise ValueError("Validation prerequisites are missing.")
 
     page = session["page"]
-    page_state = await observe_page(page)
+    page_state = state.get("current_page_state")
+    if page_state is None:
+        page_state = await observe_page(page)
+
     current_step_index = state.get("current_step_index", 0) + 1
     persona = state.get("persona")
     if persona is None:
         raise ValueError("Persona is missing before progress validation.")
     step_logs = state.get("step_logs", [])
-    agent_messages = validate_input_prompt.format_messages(
-        latest_page_state=page_state.model_dump_json(indent=2),
-        execution_result=execution_result.model_dump_json(indent=2),
-        history_summary=build_history_summary(step_logs),
-        recent_steps=[step.model_dump(mode="json") for step in step_logs[-3:]],
-        current_step_index=current_step_index,
-        max_steps=task.max_steps,
-    )
-    validate_agent = state.get("validate_agent")
-    if validate_agent is None:
-        raise ValueError("Validate agent is missing before progress validation.")
-    agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:validate"}}
-    validation = cast(
-        ValidationResult,
-        await _invoke_agent_with_retries(
-            validate_agent,
-            agent_messages,
-            agent_config,
+
+    wait_status = state.get("wait_observation_status")
+    current_action = state.get("current_action")
+    action_json = current_action.model_dump_json(indent=2) if current_action is not None else "null"
+    if wait_status == "timeout":
+        validation = _build_wait_timeout_validation(state.get("wait_observation_reason") or "等待页面进入可继续状态超时。")
+    else:
+        agent_messages = validate_input_prompt.format_messages(
+            latest_page_state=page_state.model_dump_json(indent=2),
+            current_action=action_json,
+            execution_result=execution_result.model_dump_json(indent=2),
+            history_summary=build_history_summary(step_logs),
+            recent_steps=[step.model_dump(mode="json") for step in step_logs[-3:]],
+            current_step_index=current_step_index,
+            max_steps=task.max_steps,
+        )
+        validate_agent = state.get("validate_agent")
+        if validate_agent is None:
+            raise ValueError("Validate agent is missing before progress validation.")
+        agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:validate"}}
+        validation = cast(
             ValidationResult,
-            "validate",
-        ),
-    )
+            await _invoke_agent_with_retries(
+                validate_agent,
+                agent_messages,
+                agent_config,
+                ValidationResult,
+                "validate",
+            ),
+        )
+
     guarded_validation = validate_progress(
         task,
         page_state,
@@ -302,12 +415,20 @@ def log_current_step(state: RunState) -> dict:
         raise ValueError("Step log prerequisites are missing.")
 
     step_index = current_step_index + 1
+    wait_observation_status = state.get("wait_observation_status")
+    wait_observation_reason = state.get("wait_observation_reason")
+    wait_observation_observations = state.get("wait_observation_observations")
+    wait_observation_traces = state.get("wait_observation_traces") or []
     step_log = StepLog(
         step_index=step_index,
         observed_page_state=page_state,
         decided_action=action,
         execution_result=execution_result,
         validation_result=validation_result,
+        wait_observation_status=wait_observation_status,
+        wait_observation_reason=wait_observation_reason,
+        wait_observation_observations=wait_observation_observations,
+        wait_observation_traces=wait_observation_traces,
     )
     updated_steps = [*step_logs, step_log]
     run_store.add_step(state["run_id"], step_log)
@@ -342,8 +463,10 @@ def build_run_graph(load_context_node: Any):
     workflow.add_node("load_context", load_context_node)
     workflow.add_node("init_session", init_session)
     workflow.add_node("observe_page", observe_current_page)
+    workflow.add_node("observe_after_action", observe_current_page)
     workflow.add_node("decide_action", decide_next_action)
     workflow.add_node("execute_action", execute_current_action)
+    workflow.add_node("wait_after_action", wait_after_action)
     workflow.add_node("validate_progress", validate_current_progress)
     workflow.add_node("log_step", log_current_step)
     workflow.add_node("finalize_report", finalize_report)
@@ -353,8 +476,14 @@ def build_run_graph(load_context_node: Any):
     workflow.add_edge("init_session", "observe_page")
     workflow.add_edge("observe_page", "decide_action")
     workflow.add_edge("decide_action", "execute_action")
-    workflow.add_edge("execute_action", "validate_progress")
-    workflow.add_edge("validate_progress", "log_step")
+    workflow.add_edge("execute_action", "observe_after_action")
+    workflow.add_edge("observe_after_action", "validate_progress")
+    workflow.add_conditional_edges(
+        "validate_progress",
+        route_after_validate,
+        {"wait_after_action": "wait_after_action", "log_step": "log_step"},
+    )
+    workflow.add_edge("wait_after_action", "validate_progress")
     workflow.add_conditional_edges(
         "log_step",
         route_after_log,
