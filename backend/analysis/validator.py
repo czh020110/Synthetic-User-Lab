@@ -32,15 +32,6 @@ def validate_progress(
             detected_error=True,
         )
 
-    if _matches_success_criteria(task, observed_page_state):
-        # 硬判断(需修改)
-        return ValidationResult(
-            status="succeeded",
-            should_stop=True,
-            progress_summary="页面已出现成功文案，任务完成。",
-            detected_success=True,
-        )
-
     if observed_page_state.error_messages:
         return ValidationResult(
             status="failed",
@@ -60,6 +51,17 @@ def validate_progress(
         )
 
     base_result = _normalize_agent_validation(agent_validation)
+
+    if base_result.status == "succeeded":
+        return base_result.model_copy(
+            update={
+                "friction_signals": _dedupe_signals(base_result.friction_signals),
+                "progress_summary": base_result.progress_summary or "任务已完成。",
+                "detected_success": True,
+                "detected_error": False,
+                "should_stop": True,
+            }
+        )
 
     wait_streak = _count_consecutive_waits(previous_steps, current_action)
     repeated_action_streak = _count_consecutive_action_target(previous_steps, current_action)
@@ -134,10 +136,12 @@ def _normalize_agent_validation(agent_validation: ValidationResult | None) -> Va
 
     if agent_validation.status == "succeeded":
         return ValidationResult(
-            status="running",
-            should_stop=False,
-            progress_summary="尚未检测到任务成功条件，继续执行下一步。",
+            status="succeeded",
+            should_stop=True,
+            progress_summary=agent_validation.progress_summary or "任务已完成。",
             friction_signals=agent_validation.friction_signals,
+            detected_success=True,
+            detected_error=False,
         )
 
     if agent_validation.status == "failed" and not agent_validation.detected_error:
@@ -161,12 +165,6 @@ def _failed_result(friction_signals: list[str], progress_summary: str) -> Valida
         friction_signals=_dedupe_signals(friction_signals),
         detected_error=True,
     )
-
-
-def _matches_success_criteria(task: Task, observed_page_state: ObservedPageState) -> bool:
-    """判断当前页面可见文本是否命中任务成功条件。"""
-
-    return any(criteria in observed_page_state.visible_text_summary for criteria in task.success_criteria)
 
 
 def _count_consecutive_waits(previous_steps: list[StepLog], current_action: ActionInput | None) -> int:

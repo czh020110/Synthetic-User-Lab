@@ -76,11 +76,17 @@ def make_step(
 
 
 def test_validate_progress_success() -> None:
-    task = Task(start_url=START_URL, success_criteria=["提交成功"])
+    task = Task(start_url=START_URL)
     page_state = make_page_state(text="提交成功")
     execution_result = make_execution_result("click")
+    agent_validation = ValidationResult(
+        status="succeeded",
+        should_stop=True,
+        progress_summary="agent thinks done",
+        detected_success=True,
+    )
 
-    result = validate_progress(task, page_state, execution_result, [], 3)
+    result = validate_progress(task, page_state, execution_result, [], 3, agent_validation=agent_validation)
 
     assert result.status == "succeeded"
     assert result.should_stop is True
@@ -267,7 +273,7 @@ def test_validate_progress_off_track_requests_recovery() -> None:
     assert "recovery_candidate" in result.friction_signals
 
 
-def test_validate_progress_agent_success_is_not_trusted_without_page_evidence() -> None:
+def test_validate_progress_agent_success_drives_completion() -> None:
     task = Task(start_url=START_URL)
     page_state = make_page_state()
     execution_result = make_execution_result("wait")
@@ -288,9 +294,10 @@ def test_validate_progress_agent_success_is_not_trusted_without_page_evidence() 
         agent_validation=agent_validation,
     )
 
-    assert result.status == "running"
-    assert result.should_stop is False
-    assert result.progress_summary == "尚未检测到任务成功条件，继续执行下一步。"
+    assert result.status == "succeeded"
+    assert result.should_stop is True
+    assert result.detected_success is True
+    assert result.progress_summary == "agent thinks done"
 
 
 class FakeValidateAgent:
@@ -326,9 +333,9 @@ def test_validate_current_progress_applies_guardrails(monkeypatch) -> None:
 
     result = asyncio.run(run_graph.validate_current_progress(state))
 
-    assert result["current_validation_result"].status == "running"
-    assert result["current_validation_result"].should_stop is False
-    assert result["should_stop"] is False
+    assert result["current_validation_result"].status == "succeeded"
+    assert result["current_validation_result"].should_stop is True
+    assert result["should_stop"] is True
 
 
 def test_route_after_log_uses_should_stop() -> None:

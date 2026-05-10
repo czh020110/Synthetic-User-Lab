@@ -38,10 +38,14 @@ def build_demo_task(app_base_url: str) -> Task:
 
     return Task(
         id="demo-task-onboarding",
-        name="完成体验引导表单",
-        description="进入 demo 页面，像新用户一样理解页面并完成体验引导表单；如页面要求填写姓名和邮箱，可自行生成合理的测试姓名和测试邮箱。",
+        name="验证当前实现的 demo 任务",
+        description="这个 demo 只用于验证当前 run 实现是否可用：请进入 demo 页面，触发表单流程，并在页面明确显示任务完成状态后结束。",
         start_url=f"{app_base_url}/demo/index.html",
-        success_criteria=["提交成功"],
+        success_criteria=[
+            "页面明确显示任务完成状态",
+            "成功卡片可见",
+            "表单已隐藏",
+        ],
         max_steps=settings.run_step_limit,
         allowed_actions=["navigate", "click", "fill", "wait"],
         risk_level="low",

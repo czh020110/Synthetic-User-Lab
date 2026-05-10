@@ -87,7 +87,8 @@ validate = """
   - detected_error：布尔值，是否检测到明显错误或失败。
 
 判断原则：
-- 如果页面文本或状态满足 task 的成功条件，status 为 succeeded，should_stop 为 true。
+- 你需要根据 task.description、task.success_criteria、最新页面状态、动作执行结果和历史步骤，综合判断当前任务目标是否已经达成。
+- 如果你认为当前页面和状态已经可以认定任务完成，status 必须为 succeeded，should_stop 为 true，detected_success 为 true，并在 `progress_summary` 中直接说明完成依据。
 - 如果动作执行失败、页面出现错误提示或已经达到最大步数，结合上下文判断是否 failed。
 - 如果任务尚未完成但仍有可继续路径，status 为 running，should_stop 为 false。
 - 不要因为单次普通等待或轻微无进展就直接失败，除非历史步骤显示重复卡住。
