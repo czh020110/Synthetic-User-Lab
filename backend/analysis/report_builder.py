@@ -13,6 +13,7 @@ def build_run_report(record: RunRecord, steps: list[StepLog]) -> RunReport:
     """生成当前 run 的简版报告。"""
     # 将一次run的结果整理成结构化输出结构报告
     success = bool(steps and steps[-1].validation_result.detected_success)
+    last_progress_summary = steps[-1].validation_result.progress_summary if steps else "任务未执行任何步骤。"
     friction_signals: list[str] = []
     for step in steps:
         friction_signals.extend(step.validation_result.friction_signals)  # extend直接记录进列表,不单独作为列表存入
@@ -20,6 +21,7 @@ def build_run_report(record: RunRecord, steps: list[StepLog]) -> RunReport:
     key_findings = [
         f"共执行 {len(steps)} 步。",
         f"最终状态为 {'成功' if success else '失败'}。",
+        f"最后一步判定：{last_progress_summary}",  # 添加最后一步判定结果
     ]
     if friction_signals:
         key_findings.append(f"检测到摩擦信号: {', '.join(sorted(set(friction_signals)))}。")
@@ -35,7 +37,7 @@ def build_run_report(record: RunRecord, steps: list[StepLog]) -> RunReport:
     return RunReport(  # 返回report
         run_id=record.run_id,
         status="succeeded" if success else "failed",
-        summary="任务执行成功。" if success else "任务未完成。",
+        summary=last_progress_summary,
         success=success,
         persona=record.persona,
         task=record.task,

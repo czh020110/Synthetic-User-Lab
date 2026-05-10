@@ -17,6 +17,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 checkpointer = InMemorySaver()
 
 from backend.analysis.report_builder import build_run_report  # 生成最终的运行报告
+from backend.analysis.validator import validate_progress
 from backend.core.config import get_settings  # 读取全局配置
 settings = get_settings()
 
@@ -232,10 +233,19 @@ async def validate_current_progress(state: DemoRunState) -> dict:
     agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:validate"}}
     response = await validate_agent.ainvoke(cast(Any, {"messages": agent_messages}), config=agent_config)
     validation = ValidationResult.model_validate(response["structured_response"])  # agent 格式化输出的字段存放在"structured_response"中
+    guarded_validation = validate_progress(
+        task,
+        page_state,
+        execution_result,
+        step_logs,
+        current_step_index,
+        current_action=state.get("current_action"),
+        agent_validation=validation,
+    )
     return {
         "current_page_state": page_state,
-        "current_validation_result": validation,
-        "should_stop": validation.should_stop,
+        "current_validation_result": guarded_validation,
+        "should_stop": guarded_validation.should_stop,
     }
 
 
