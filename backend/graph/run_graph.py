@@ -324,6 +324,7 @@ async def run_workflow(
                 update={
                     "status": "failed",
                     "success": False,
+                    "conclusion": "fix",
                     "summary": f"运行异常中断: {error_message}",
                     "key_findings": [
                         *report.key_findings,

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 ActionName = Literal["navigate", "click", "fill", "wait"]
 RunStatus = Literal["queued", "running", "succeeded", "failed"]
 ValidationStatus = Literal["running", "succeeded", "failed"]
+ReportConclusion = Literal["keep", "optimize", "fix"]
 
 
 def utc_now() -> datetime:
@@ -136,9 +137,10 @@ class RunReport(BaseModel):
     """描述最终 run 报告。"""
 
     run_id: str  # 单次run的唯一id
-    status: RunStatus  # run 的最终状态 
-    summary: str  # run的文字总结 
+    status: RunStatus  # run 的最终状态
+    summary: str  # run的文字总结
     success: bool # run 是否成功
+    conclusion: ReportConclusion  # 本次 run 的最终结论级别
     persona: Persona  # 使用的是哪个人格
     task: Task  # run 执行的是哪个任务
     total_steps: int  # 总步数

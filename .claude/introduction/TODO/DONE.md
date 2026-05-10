@@ -129,3 +129,16 @@
   - 验证方式：随本次提交验收
   - 关联修改记录：introduction/修改记录/拆分通用run-graph以收敛demo绑定.md
   - 关联 Commit：拆分通用run-graph以收敛demo绑定
+
+- [x] 2026-05-10：为 `RunReport` 增加统一 `conclusion` 结论字段，并将结论值固定为 `keep` / `optimize` / `fix`，保证正常收尾与异常补报告结构一致。
+  - 关联 TODO：无
+  - 来源 STEP：无
+  - 验证方式：`tests/test_report_builder.py`、`tests/test_validator.py`、`tests/test_demo_run_api.py`
+  - 关联修改记录：introduction/修改记录/收敛运行报告结论并细化问题报告.md
+  - 关联 Commit：收敛运行报告结论并细化问题报告
+- [x] 2026-05-10：增强 `backend/analysis/report_builder.py`，让 `key_findings` 与 `next_recommendations` 基于本次 run 的真实 steps、摩擦信号、最后一步结论、persona 与 task 生成详细问题报告；成功且无明显问题时允许建议为空。
+  - 关联 TODO：无
+  - 来源 STEP：无
+  - 验证方式：`tests/test_report_builder.py`、`tests/test_validator.py`、`tests/test_demo_run_api.py`
+  - 关联修改记录：introduction/修改记录/收敛运行报告结论并细化问题报告.md
+  - 关联 Commit：收敛运行报告结论并细化问题报告
