@@ -2,9 +2,9 @@ from __future__ import annotations
 
 # ============================ LangGraph 状态模块 ============================ #
 # 使用技术栈: Python / TypedDict
-# 模块功能: 定义 demo run 在图内共享的状态字段
+# 模块功能: 定义 run 在图内共享的状态字段
 # 模块数据流: API 输入 -> GraphState -> 各节点增量更新 -> 最终报告
-# 模块接口说明: DemoRunState 作为 StateGraph 的状态 schema
+# 模块接口说明: RunState 作为 StateGraph 的状态 schema
 
 from pathlib import Path
 from typing import Any
@@ -13,26 +13,26 @@ from typing_extensions import NotRequired, Required, TypedDict
 
 from backend.schemas.run_schemas import (
     ActionInput,
-    DemoPersona,
-    DemoTask,
     ExecutionResult,
     ObservedPageState,
+    Persona,
     RunRecord,
     RunRequest,
     RunReport,
     StepLog,
+    Task,
     ValidationResult,
 )
 
 # 主Graph状态
-class DemoRunState(TypedDict):  # 目前是demo
+class RunState(TypedDict):
     run_id: Required[str]
     request: Required[RunRequest]
     screenshot_dir: Required[Path]
     app_base_url: Required[str]
-    record: NotRequired[RunRecord]  # 目前是demo 
-    persona: NotRequired[DemoPersona]  # 目前是demo
-    task: NotRequired[DemoTask]  # 目前是demo
+    record: NotRequired[RunRecord]
+    persona: NotRequired[Persona]
+    task: NotRequired[Task]
     session: NotRequired[dict[str, Any]]
     current_page_state: NotRequired[ObservedPageState]
     current_action: NotRequired[ActionInput]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # ============================ 内存运行存储模块 ============================ #
 # 使用技术栈: Python / Pydantic
-# 模块功能: 保存 demo run 的状态、步骤日志与最终报告
+# 模块功能: 保存 run 的状态、步骤日志与最终报告
 # 模块数据流: API 创建记录 -> 图执行逐步写入 -> API 查询状态/步骤/报告
 # 模块接口说明: InMemoryRunStore 提供 create/get/update/complete/fail 方法
 
@@ -18,7 +18,7 @@ def utc_now() -> datetime:
 
 
 class InMemoryRunStore:
-    """管理当前进程中的 demo run 数据。"""
+    """管理当前进程中的 run 数据。"""
     # 记录在内存的 run 记录
 
     def __init__(self) -> None:

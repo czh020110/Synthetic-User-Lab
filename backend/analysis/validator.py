@@ -4,16 +4,16 @@ from urllib.parse import urlsplit
 
 from backend.schemas.run_schemas import (
     ActionInput,
-    DemoTask,
     ExecutionResult,
     ObservedPageState,
     StepLog,
+    Task,
     ValidationResult,
 )
 
 
 def validate_progress(
-    task: DemoTask,
+    task: Task,
     observed_page_state: ObservedPageState,
     execution_result: ExecutionResult,
     previous_steps: list[StepLog],
@@ -163,7 +163,7 @@ def _failed_result(friction_signals: list[str], progress_summary: str) -> Valida
     )
 
 
-def _matches_success_criteria(task: DemoTask, observed_page_state: ObservedPageState) -> bool:
+def _matches_success_criteria(task: Task, observed_page_state: ObservedPageState) -> bool:
     """判断当前页面可见文本是否命中任务成功条件。"""
 
     return any(criteria in observed_page_state.visible_text_summary for criteria in task.success_criteria)
@@ -212,7 +212,7 @@ def _count_stable_page_streak(previous_steps: list[StepLog], observed_page_state
 
 
 def _count_off_track_streak(
-    task: DemoTask,
+    task: Task,
     previous_steps: list[StepLog],
     current_action: ActionInput | None,
     observed_page_state: ObservedPageState,

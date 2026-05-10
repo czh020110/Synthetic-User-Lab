@@ -98,3 +98,34 @@
   - 验证方式：随本次提交验收
   - 关联修改记录：introduction/修改记录/完善验证护栏并同步文档.md
   - 关联 Commit：完善验证护栏并同步文档
+
+- [x] 2026-05-10：T-001（P0）：在 `backend/schemas/run_schemas.py` 与 `backend/graph/run_state.py` 中移除共享层对 `DemoPersona`、`DemoTask`、`DemoRunState` 的强绑定，改为通用的 `Persona`、`Task`、`RunState`。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/拆分通用run-graph以收敛demo绑定.md
+  - 关联 Commit：拆分通用run-graph以收敛demo绑定
+- [x] 2026-05-10：T-002（P0）：新增 `backend/graph/run_graph.py`，将 `backend/graph/demo_run_graph.py` 中通用的运行节点、图编排与异常兜底逻辑迁入，并保持现有主链路与验证逻辑一致。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/拆分通用run-graph以收敛demo绑定.md
+  - 关联 Commit：拆分通用run-graph以收敛demo绑定
+- [x] 2026-05-10：T-003（P0）：将 `backend/graph/demo_run_graph.py` 收敛为 demo 场景适配层，只保留 demo 默认 persona/task、`/demo/index.html` 装配和 `run_demo_workflow(...)` 对通用 graph 的包装调用。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/拆分通用run-graph以收敛demo绑定.md
+  - 关联 Commit：拆分通用run-graph以收敛demo绑定
+- [x] 2026-05-10：T-004（P0）：调整 `backend/api/routes/demo_runs.py`，保留 `/runs/demo/*` 入口，但移除路由层对 demo task / persona / start_url 的直接硬编码，实现细节回收到 demo graph 层。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/拆分通用run-graph以收敛demo绑定.md
+  - 关联 Commit：拆分通用run-graph以收敛demo绑定
+- [x] 2026-05-10：T-005（P1）：将 `backend/analysis/validator.py`、`backend/analysis/report_builder.py` 及必要 import 跟随切换到通用 `Task` / `Persona` 概念，不主动修改执行、验证和报告逻辑。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/拆分通用run-graph以收敛demo绑定.md
+  - 关联 Commit：拆分通用run-graph以收敛demo绑定
+- [x] 2026-05-10：T-006（P1）：更新 `tests/test_validator.py` 与 `tests/test_demo_run_api.py`，复用现有 helper 和 smoke test 模式验证迁移后通用 graph 与 demo API 入口未回归。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/拆分通用run-graph以收敛demo绑定.md
+  - 关联 Commit：拆分通用run-graph以收敛demo绑定

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # ============================ Run 数据模型模块 ============================ #
 # 使用技术栈: Python / Pydantic
-# 模块功能: 定义 demo run 的请求、页面观察、动作、步骤日志与报告结构
+# 模块功能: 定义 run 的请求、页面观察、动作、步骤日志与报告结构
 # 模块数据流: API 请求 -> LangGraph 状态 -> 执行结果/报告 -> API 响应
 # 模块接口说明: 各 BaseModel 作为模块间统一输入输出结构
 
@@ -32,24 +32,25 @@ class ApiResponse(BaseModel):
 
 # ========= Demo require========== #
 
-class DemoPersona(BaseModel):
-    """描述当前 demo 使用的固定 persona。"""
+class Persona(BaseModel):
+    """描述当前 run 使用的 persona。"""
 
-    id: str = "demo-persona-newbie"
-    name: str = "新手体验用户"
+    id: str = "persona-default"
+    name: str = "默认测试用户"
     description: str = "会按照页面主路径逐步完成任务，不进行高风险操作。"
     skill_level: str = "newbie"  # 用户熟练度，newbie 表示新手型用户。
     patience_level: str = "medium"  # 用户耐心程度，medium 表示遇到小问题会继续尝试。
     risk_preference: str = "low"  # 用户风险偏好，low 表示倾向安全操作，不主动尝试高风险动作。
 
-class DemoTask(BaseModel):
-    """描述当前 demo 使用的固定任务。"""
 
-    id: str = "demo-task-onboarding"
-    name: str = "完成体验引导表单"
-    description: str = "进入 demo 页面，像新用户一样理解页面并完成体验引导表单；如页面要求填写姓名和邮箱，可自行生成合理的测试姓名和测试邮箱。"
+class Task(BaseModel):
+    """描述当前 run 使用的任务。"""
+
+    id: str = "task-default"
+    name: str = "完成页面任务"
+    description: str = "进入页面后，根据页面提示完成当前任务；如页面要求填写表单，可自行生成合理的测试数据。"
     start_url: str
-    success_criteria: list[str] = Field(default_factory=lambda: ["提交成功"])
+    success_criteria: list[str] = Field(default_factory=list)
     max_steps: int = 8
     allowed_actions: list[ActionName] = Field(default_factory=lambda: ["navigate", "click", "fill", "wait"])
     risk_level: str = "low"
@@ -57,9 +58,9 @@ class DemoTask(BaseModel):
 
 
 class RunRequest(BaseModel):
-    """定义启动 demo run 的请求体。"""
+    """定义启动 run 的请求体。"""
 
-    run_name: str = "demo-run"
+    run_name: str = "run"
     headless: bool | None = None  # 是否无头浏览器模式，None系统默认,True不打开浏览器,后台跑, False打开浏览器窗口
 
 # ========= Demo require========== #
@@ -138,8 +139,8 @@ class RunReport(BaseModel):
     status: RunStatus  # run 的最终状态 
     summary: str  # run的文字总结 
     success: bool # run 是否成功
-    persona: DemoPersona  # 使用的是哪个人格
-    task: DemoTask  # run 执行的是哪个任务
+    persona: Persona  # 使用的是哪个人格
+    task: Task  # run 执行的是哪个任务
     total_steps: int  # 总步数
     friction_signals: list[str] = Field(default_factory=list)  # run 中的摩擦信号列表
     key_findings: list[str] = Field(default_factory=list)  # run 的关键发现
@@ -152,8 +153,8 @@ class RunRecord(BaseModel):
     run_id: str = Field(default_factory=lambda: str(uuid4()))
     status: RunStatus = "queued"  # run 的运行状态:queued/running/succeeded/failed
     request: RunRequest  # 启动run的请求体内容
-    persona: DemoPersona  # 使用的人格
-    task: DemoTask  # run 任务
+    persona: Persona  # 使用的人格
+    task: Task  # run 任务
     created_at: datetime = Field(default_factory=utc_now)  # 创建时间
     updated_at: datetime = Field(default_factory=utc_now)  # 更新时间
     error_message: str | None = None  # 报错消息

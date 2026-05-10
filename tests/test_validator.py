@@ -4,12 +4,12 @@ import asyncio
 from typing import Any, cast
 
 from backend.analysis.validator import validate_progress
-from backend.graph import demo_run_graph
+import backend.graph.run_graph as run_graph
 from backend.schemas.run_schemas import (
     ActionInput,
     ActionName,
-    DemoPersona,
-    DemoTask,
+    Persona,
+    Task,
     ExecutionResult,
     ObservedPageState,
     StepLog,
@@ -76,7 +76,7 @@ def make_step(
 
 
 def test_validate_progress_success() -> None:
-    task = DemoTask(start_url=START_URL)
+    task = Task(start_url=START_URL, success_criteria=["提交成功"])
     page_state = make_page_state(text="提交成功")
     execution_result = make_execution_result("click")
 
@@ -88,7 +88,7 @@ def test_validate_progress_success() -> None:
 
 
 def test_validate_progress_failed_action() -> None:
-    task = DemoTask(start_url=START_URL)
+    task = Task(start_url=START_URL)
     page_state = make_page_state()
     execution_result = make_execution_result("click", success=False, detail="failed", error_message="boom")
 
@@ -100,7 +100,7 @@ def test_validate_progress_failed_action() -> None:
 
 
 def test_validate_progress_page_error() -> None:
-    task = DemoTask(start_url=START_URL)
+    task = Task(start_url=START_URL)
     page_state = make_page_state(errors=["字段校验失败"])
     execution_result = make_execution_result("click")
 
@@ -112,7 +112,7 @@ def test_validate_progress_page_error() -> None:
 
 
 def test_validate_progress_step_limit() -> None:
-    task = DemoTask(start_url=START_URL, max_steps=3)
+    task = Task(start_url=START_URL, max_steps=3)
     page_state = make_page_state()
     execution_result = make_execution_result("click")
 
@@ -124,7 +124,7 @@ def test_validate_progress_step_limit() -> None:
 
 
 def test_validate_progress_repeated_wait_requests_recovery() -> None:
-    task = DemoTask(start_url=START_URL)
+    task = Task(start_url=START_URL)
     previous_steps = [
         make_step(1, action="wait", target="body"),
         make_step(2, action="wait", target="body"),
@@ -148,7 +148,7 @@ def test_validate_progress_repeated_wait_requests_recovery() -> None:
 
 
 def test_validate_progress_repeated_wait_stops_after_threshold() -> None:
-    task = DemoTask(start_url=START_URL)
+    task = Task(start_url=START_URL)
     previous_steps = [
         make_step(1, action="wait", target="body"),
         make_step(2, action="wait", target="body"),
@@ -172,7 +172,7 @@ def test_validate_progress_repeated_wait_stops_after_threshold() -> None:
 
 
 def test_validate_progress_repeated_action_target_requests_recovery() -> None:
-    task = DemoTask(start_url=START_URL)
+    task = Task(start_url=START_URL)
     previous_steps = [
         make_step(1, action="click", target="#start-demo"),
         make_step(2, action="click", target="#start-demo"),
@@ -196,7 +196,7 @@ def test_validate_progress_repeated_action_target_requests_recovery() -> None:
 
 
 def test_validate_progress_repeated_action_target_stops_after_threshold() -> None:
-    task = DemoTask(start_url=START_URL)
+    task = Task(start_url=START_URL)
     previous_steps = [
         make_step(1, action="click", target="#start-demo"),
         make_step(2, action="click", target="#start-demo"),
@@ -220,7 +220,7 @@ def test_validate_progress_repeated_action_target_stops_after_threshold() -> Non
 
 
 def test_validate_progress_stuck_page_requests_recovery() -> None:
-    task = DemoTask(start_url=START_URL)
+    task = Task(start_url=START_URL)
     previous_steps = [
         make_step(1, action="click", target="#start-demo"),
         make_step(2, action="click", target="#submit-demo"),
@@ -244,7 +244,7 @@ def test_validate_progress_stuck_page_requests_recovery() -> None:
 
 
 def test_validate_progress_off_track_requests_recovery() -> None:
-    task = DemoTask(start_url=START_URL)
+    task = Task(start_url=START_URL)
     previous_steps = [
         make_step(1, url=OTHER_URL, action="navigate", target=OTHER_URL),
         make_step(2, url=OTHER_URL, action="wait", target="body"),
@@ -268,7 +268,7 @@ def test_validate_progress_off_track_requests_recovery() -> None:
 
 
 def test_validate_progress_agent_success_is_not_trusted_without_page_evidence() -> None:
-    task = DemoTask(start_url=START_URL)
+    task = Task(start_url=START_URL)
     page_state = make_page_state()
     execution_result = make_execution_result("wait")
     agent_validation = ValidationResult(
@@ -310,13 +310,13 @@ async def _fake_observe_page(_page):
 
 
 def test_validate_current_progress_applies_guardrails(monkeypatch) -> None:
-    monkeypatch.setattr(demo_run_graph, "observe_page", _fake_observe_page)
+    monkeypatch.setattr(run_graph, "observe_page", _fake_observe_page)
 
     state = cast(Any, {
         "run_id": "run-1",
         "session": {"page": object()},
-        "task": DemoTask(start_url=START_URL),
-        "persona": DemoPersona(),
+        "task": Task(start_url=START_URL),
+        "persona": Persona(),
         "step_logs": [],
         "current_step_index": 0,
         "current_action": make_action("wait", target="body"),
@@ -324,7 +324,7 @@ def test_validate_current_progress_applies_guardrails(monkeypatch) -> None:
         "validate_agent": FakeValidateAgent(),
     })
 
-    result = asyncio.run(demo_run_graph.validate_current_progress(state))
+    result = asyncio.run(run_graph.validate_current_progress(state))
 
     assert result["current_validation_result"].status == "running"
     assert result["current_validation_result"].should_stop is False
@@ -332,5 +332,5 @@ def test_validate_current_progress_applies_guardrails(monkeypatch) -> None:
 
 
 def test_route_after_log_uses_should_stop() -> None:
-    assert demo_run_graph.route_after_log(cast(Any, {"should_stop": False})) == "observe_page"
-    assert demo_run_graph.route_after_log(cast(Any, {"should_stop": True})) == "finalize_report"
+    assert run_graph.route_after_log(cast(Any, {"should_stop": False})) == "observe_page"
+    assert run_graph.route_after_log(cast(Any, {"should_stop": True})) == "finalize_report"

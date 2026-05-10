@@ -12,8 +12,8 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Request  # 路由、异常和请求对象
 
 from backend.core.config import get_settings
-from backend.graph.demo_run_graph import run_demo_workflow
-from backend.schemas.run_schemas import ApiResponse, DemoPersona, DemoTask, RunRecord, RunRequest
+from backend.graph.demo_run_graph import create_demo_placeholder_record, run_demo_workflow
+from backend.schemas.run_schemas import ApiResponse, RunRequest
 from backend.stores.in_memory_run_store import run_store
 
 router = APIRouter(prefix="/runs/demo", tags=["demo-runs"])
@@ -33,25 +33,10 @@ async def start_demo_run(request: Request, payload: RunRequest) -> ApiResponse:
     settings = get_settings()
     run_id = str(uuid4())
     app_base_url = str(request.base_url).rstrip("/")
-    placeholder_record = RunRecord(
+    placeholder_record = create_demo_placeholder_record(
         run_id=run_id,
         request=payload,
-        persona=DemoPersona(
-            id="pending-persona",
-            name="pending",
-            description="run 尚未进入 persona 加载阶段。",
-            skill_level="pending",
-            patience_level="pending",
-            risk_preference="pending",
-        ),
-        task=DemoTask(
-            id="pending-task",
-            name="pending",
-            description="run 尚未进入 task 加载阶段。",
-            start_url=f"{app_base_url}/demo/index.html",
-            success_criteria=["页面出现提交成功文案"],
-            max_steps=settings.run_step_limit,
-        ),
+        app_base_url=app_base_url,
     )
     run_store.create_run(placeholder_record)
     asyncio.create_task(
