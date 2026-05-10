@@ -142,3 +142,11 @@
   - 验证方式：`tests/test_report_builder.py`、`tests/test_validator.py`、`tests/test_demo_run_api.py`
   - 关联修改记录：introduction/修改记录/收敛运行报告结论并细化问题报告.md
   - 关联 Commit：收敛运行报告结论并细化问题报告
+
+- [x] 2026-05-10：将 graph 与 report 提示词统一迁移到 `backend/prompt/`，并为报告分析提示词补充 `conclusion` 三档取值的中文含义说明。
+  - 关联 TODO：无
+  - 来源 STEP：无
+  - 验证方式：`D:/Env/Anaconda/Anaconda3-2024.06-1/envs/synthetic-user-lab/python.exe -m pytest tests/test_report_builder.py tests/test_validator.py`、`D:/Env/Anaconda/Anaconda3-2024.06-1/envs/synthetic-user-lab/python.exe -m pytest tests/test_demo_run_api.py`
+  - 关联修改记录：introduction/修改记录/统一迁移提示词到-backend-prompt.md
+  - 关联 Commit：统一迁移提示词到 backend-prompt
+

@@ -21,7 +21,7 @@ from backend.analysis.validator import validate_progress
 from backend.core.config import get_settings
 from backend.execution.observer import observe_page
 from backend.execution.playwright_adapter import close_browser_session, create_browser_session, execute_action
-from backend.graph.graph_prompt import decide, decide_input, validate, validate_input
+from backend.prompt.graph import decide, decide_input, validate, validate_input
 from backend.graph.run_state import RunState
 from backend.schemas.run_schemas import ActionInput, Persona, RunRequest, StepLog, Task, ValidationResult
 from backend.stores.in_memory_run_store import run_store
