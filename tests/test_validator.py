@@ -1,20 +1,26 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any, cast
+
+import pytest
 
 from backend.analysis.validator import validate_progress
 import backend.graph.run_graph as run_graph
 from backend.schemas.run_schemas import (
     ActionInput,
     ActionName,
-    Persona,
-    Task,
     ExecutionResult,
     ObservedPageState,
+    Persona,
+    RunRecord,
+    RunRequest,
     StepLog,
+    Task,
     ValidationResult,
 )
+from backend.stores.in_memory_run_store import run_store
 
 START_URL = "http://127.0.0.1:8000/demo/index.html"
 OTHER_URL = "http://127.0.0.1:8000/demo/other.html"
@@ -341,3 +347,137 @@ def test_validate_current_progress_applies_guardrails(monkeypatch) -> None:
 def test_route_after_log_uses_should_stop() -> None:
     assert run_graph.route_after_log(cast(Any, {"should_stop": False})) == "observe_page"
     assert run_graph.route_after_log(cast(Any, {"should_stop": True})) == "finalize_report"
+
+
+class FailingDecideAgent:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def ainvoke(self, *_args, **_kwargs):
+        self.calls += 1
+        raise RuntimeError("HTTP 401 invalid api key")
+
+
+def test_decide_next_action_retries_agent_api_errors_before_model_error() -> None:
+    decide_agent = FailingDecideAgent()
+    state = cast(Any, {
+        "run_id": "run-model-error",
+        "current_page_state": make_page_state(),
+        "persona": Persona(),
+        "task": Task(start_url=START_URL),
+        "step_logs": [],
+        "decide_agent": decide_agent,
+    })
+
+    with pytest.raises(run_graph.ModelInvocationError) as exc_info:
+        asyncio.run(run_graph.decide_next_action(state))
+
+    assert decide_agent.calls == run_graph.MODEL_API_RETRY_LIMIT + 1
+    assert exc_info.value.raw_message == "HTTP 401 invalid api key"
+
+
+class BadFormatThenValidDecideAgent:
+    def __init__(self) -> None:
+        self.messages_by_call: list[list[Any]] = []
+
+    async def ainvoke(self, payload, **_kwargs):
+        self.messages_by_call.append(payload["messages"])
+        if len(self.messages_by_call) == 1:
+            return {"structured_response": {"action": "invalid", "target": "#submit"}}
+        return {
+            "structured_response": ActionInput(
+                action="click",
+                target="#submit",
+                reason="格式修正后继续执行",
+            ).model_dump()
+        }
+
+
+def test_decide_next_action_retries_bad_format_with_format_prompt() -> None:
+    decide_agent = BadFormatThenValidDecideAgent()
+    state = cast(Any, {
+        "run_id": "run-format-retry",
+        "current_page_state": make_page_state(),
+        "persona": Persona(),
+        "task": Task(start_url=START_URL),
+        "step_logs": [],
+        "decide_agent": decide_agent,
+    })
+
+    result = asyncio.run(run_graph.decide_next_action(state))
+
+    assert result["current_action"].action == "click"
+    assert len(decide_agent.messages_by_call) == 2
+    assert len(decide_agent.messages_by_call[1]) == len(decide_agent.messages_by_call[0]) + 1
+    assert "上一次回复未能通过结构化格式校验" in decide_agent.messages_by_call[1][-1].content
+    assert "JSON Schema" in decide_agent.messages_by_call[1][-1].content
+
+
+class AlwaysBadFormatDecideAgent:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def ainvoke(self, *_args, **_kwargs):
+        self.calls += 1
+        return {"structured_response": {"action": "invalid", "target": "#submit"}}
+
+
+def test_decide_next_action_stops_after_format_retry_limit() -> None:
+    decide_agent = AlwaysBadFormatDecideAgent()
+    state = cast(Any, {
+        "run_id": "run-format-error",
+        "current_page_state": make_page_state(),
+        "persona": Persona(),
+        "task": Task(start_url=START_URL),
+        "step_logs": [],
+        "decide_agent": decide_agent,
+    })
+
+    with pytest.raises(run_graph.ModelInvocationError) as exc_info:
+        asyncio.run(run_graph.decide_next_action(state))
+
+    assert decide_agent.calls == run_graph.MODEL_FORMAT_RETRY_LIMIT + 1
+    assert "模型回复格式不正确" in exc_info.value.raw_message
+
+
+class FakeModelErrorGraph:
+    async def ainvoke(self, *_args, **_kwargs):
+        raise run_graph.ModelInvocationError("decide", "HTTP 401 invalid api key")
+
+
+def test_run_workflow_returns_raw_model_error_in_status_and_report(monkeypatch) -> None:
+    run_store.clear()
+    monkeypatch.setattr(run_graph, "build_run_graph", lambda _load_context_node: FakeModelErrorGraph())
+    run_id = "run-model-error"
+    run_store.create_run(
+        RunRecord(
+            run_id=run_id,
+            request=RunRequest(),
+            persona=Persona(),
+            task=Task(start_url=START_URL),
+        )
+    )
+
+    with pytest.raises(run_graph.ModelInvocationError):
+        asyncio.run(
+            run_graph.run_workflow(
+                run_id=run_id,
+                request=RunRequest(),
+                app_base_url="http://127.0.0.1:8000",
+                screenshot_dir=Path("screenshots"),
+                load_context_node=object(),
+            )
+        )
+
+    status = run_store.get_status(run_id)
+    report = run_store.get_report(run_id)
+
+    assert status is not None
+    assert status.status == "failed"
+    assert status.error_type == "model_error"
+    assert status.error_message == "HTTP 401 invalid api key"
+    assert report is not None
+    assert report.error_type == "model_error"
+    assert report.error_message == "HTTP 401 invalid api key"
+    assert report.summary == "模型调用错误: HTTP 401 invalid api key"
+    assert any("模型调用错误: HTTP 401 invalid api key" == item for item in report.key_findings)

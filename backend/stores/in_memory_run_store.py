@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from backend.schemas.run_schemas import RunRecord, RunReport, RunStatusResponse, StepLog
+from backend.schemas.run_schemas import RunErrorType, RunRecord, RunReport, RunStatusResponse, StepLog
 
 
 def utc_now() -> datetime:
@@ -64,15 +64,17 @@ class InMemoryRunStore:
         record.status = report.status
         record.updated_at = utc_now()
         if report.status == "succeeded":
+            record.error_type = None
             record.error_message = None  # 成功则清理错误信息
         return record.model_copy(deep=True)
 
-    def fail_run(self, run_id: str, error_message: str) -> RunRecord:
+    def fail_run(self, run_id: str, error_message: str, error_type: RunErrorType = "system_error") -> RunRecord:
         """记录异常并标记运行失败。"""
 
         record = self._records[run_id]
         record.status = "failed"  # 错误状态
         record.updated_at = utc_now()  # 更新时间
+        record.error_type = error_type
         record.error_message = error_message  # 错误信息
         return record.model_copy(deep=True)
 
@@ -94,6 +96,7 @@ class InMemoryRunStore:
             status=record.status,
             created_at=record.created_at,
             updated_at=record.updated_at,
+            error_type=record.error_type,
             error_message=record.error_message,
         )
 

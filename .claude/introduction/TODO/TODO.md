@@ -9,5 +9,5 @@
 
 - [ ] T-002（P0）：为最小恢复分支补齐 `tests/test_validator.py`、`tests/test_demo_run_api.py` 与必要的 `tests/test_report_builder.py` 回归，确认恢复后 demo API 仍能生成包含 `conclusion` 的最终报告。
   - 来源 STEP：无
-  - 依赖：T-001
+  - 依赖：无
   - 验收标准：本次提交内可验证完成

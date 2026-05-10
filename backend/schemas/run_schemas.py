@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 ActionName = Literal["navigate", "click", "fill", "wait"]
 RunStatus = Literal["queued", "running", "succeeded", "failed"]
+RunErrorType = Literal["model_error", "system_error"]
 ValidationStatus = Literal["running", "succeeded", "failed"]
 ReportConclusion = Literal["keep", "optimize", "fix"]
 
@@ -147,6 +148,8 @@ class RunReport(BaseModel):
     friction_signals: list[str] = Field(default_factory=list)  # run 中的摩擦信号列表
     key_findings: list[str] = Field(default_factory=list)  # run 的关键发现
     next_recommendations: list[str] = Field(default_factory=list)  # 本次run 的后续建议
+    error_type: RunErrorType | None = None  # run 失败时的错误类型
+    error_message: str | None = None  # run 失败时的原始错误信息
 
 
 class RunRecord(BaseModel):
@@ -159,6 +162,7 @@ class RunRecord(BaseModel):
     task: Task  # run 任务
     created_at: datetime = Field(default_factory=utc_now)  # 创建时间
     updated_at: datetime = Field(default_factory=utc_now)  # 更新时间
+    error_type: RunErrorType | None = None  # 报错类型
     error_message: str | None = None  # 报错消息
 
 
@@ -169,4 +173,5 @@ class RunStatusResponse(BaseModel):
     status: RunStatus
     created_at: datetime
     updated_at: datetime
+    error_type: RunErrorType | None = None
     error_message: str | None = None

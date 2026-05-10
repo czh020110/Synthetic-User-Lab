@@ -6,29 +6,84 @@ from __future__ import annotations
 # 模块数据流: RunRequest -> StateGraph -> StepLog[] / RunReport
 # 模块接口说明: run_workflow() 执行一次完整 run
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, cast
 
 from langchain.agents import create_agent
+from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr, ValidationError
 
 from backend.analysis.report_builder import build_run_report
 from backend.analysis.validator import validate_progress
 from backend.core.config import get_settings
 from backend.execution.observer import observe_page
 from backend.execution.playwright_adapter import close_browser_session, create_browser_session, execute_action
-from backend.prompt.graph import decide, decide_input, validate, validate_input
+from backend.prompt.graph import decide, decide_input, format_retry_input, validate, validate_input
 from backend.graph.run_state import RunState
-from backend.schemas.run_schemas import ActionInput, Persona, RunRequest, StepLog, Task, ValidationResult
+from backend.schemas.run_schemas import ActionInput, Persona, RunErrorType, RunRequest, StepLog, Task, ValidationResult
 from backend.stores.in_memory_run_store import run_store
 
 logger = logging.getLogger(__name__)
 checkpointer = InMemorySaver()
 settings = get_settings()
+MODEL_API_RETRY_LIMIT = 5
+MODEL_FORMAT_RETRY_LIMIT = 3
+
+
+class ModelInvocationError(RuntimeError):
+    def __init__(self, stage: str, raw_message: str) -> None:
+        self.stage = stage
+        self.raw_message = raw_message
+        super().__init__(raw_message)
+
+
+def _raw_exception_message(exc: Exception) -> str:
+    return str(exc) or repr(exc)
+
+
+def _format_validation_error(exc: Exception) -> str:
+    return f"{type(exc).__name__}: {_raw_exception_message(exc)}"
+
+
+def _format_retry_prompt(response_model: type[BaseModel], error: str) -> HumanMessage:
+    schema = json.dumps(response_model.model_json_schema(), ensure_ascii=False, indent=2)
+    return HumanMessage(content=format_retry_input.format(schema=schema, error=error))
+
+
+async def _invoke_agent_with_retries(
+    agent: Any,
+    messages: list[Any],
+    config: Any,
+    response_model: type[BaseModel],
+    stage: str,
+) -> BaseModel:
+    current_messages = list(messages)
+    api_failures = 0
+    format_failures = 0
+    last_format_error = ""
+
+    while True:
+        try:
+            response = await agent.ainvoke(cast(Any, {"messages": current_messages}), config=config)
+        except Exception as exc:
+            api_failures += 1
+            if api_failures > MODEL_API_RETRY_LIMIT:
+                raise ModelInvocationError(stage, _raw_exception_message(exc)) from exc
+            continue
+
+        try:
+            return response_model.model_validate(response["structured_response"])
+        except (KeyError, TypeError, ValidationError) as exc:
+            format_failures += 1
+            last_format_error = _format_validation_error(exc)
+            if format_failures > MODEL_FORMAT_RETRY_LIMIT:
+                raise ModelInvocationError(stage, f"模型回复格式不正确: {last_format_error}") from exc
+            current_messages = [*current_messages, _format_retry_prompt(response_model, last_format_error)]
 
 
 def build_history_summary(step_logs: list[StepLog]) -> str:
@@ -150,8 +205,16 @@ async def decide_next_action(state: RunState) -> dict:
     if decide_agent is None:
         raise ValueError("Decide agent is missing before action decision.")
     agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:decide"}}
-    response = await decide_agent.ainvoke(cast(Any, {"messages": agent_messages}), config=agent_config)
-    action = ActionInput.model_validate(response["structured_response"])
+    action = cast(
+        ActionInput,
+        await _invoke_agent_with_retries(
+            decide_agent,
+            agent_messages,
+            agent_config,
+            ActionInput,
+            "decide",
+        ),
+    )
 
     return {"current_action": action}
 
@@ -200,8 +263,16 @@ async def validate_current_progress(state: RunState) -> dict:
     if validate_agent is None:
         raise ValueError("Validate agent is missing before progress validation.")
     agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:validate"}}
-    response = await validate_agent.ainvoke(cast(Any, {"messages": agent_messages}), config=agent_config)
-    validation = ValidationResult.model_validate(response["structured_response"])
+    validation = cast(
+        ValidationResult,
+        await _invoke_agent_with_retries(
+            validate_agent,
+            agent_messages,
+            agent_config,
+            ValidationResult,
+            "validate",
+        ),
+    )
     guarded_validation = validate_progress(
         task,
         page_state,
@@ -313,9 +384,13 @@ async def run_workflow(
     try:
         return await graph.ainvoke(initial_state)
     except Exception as exc:
-        error_message = f"{type(exc).__name__}: {repr(exc)}"
+        is_model_error = isinstance(exc, ModelInvocationError)
+        error_type: RunErrorType = "model_error" if is_model_error else "system_error"
+        error_message = exc.raw_message if is_model_error else f"{type(exc).__name__}: {repr(exc)}"
+        report_summary = f"模型调用错误: {error_message}" if is_model_error else f"运行异常中断: {error_message}"
+        finding = f"模型调用错误: {error_message}" if is_model_error else f"异常: {error_message}"
         logger.exception("run workflow failed, run_id=%s", run_id)
-        run_store.fail_run(run_id, error_message)
+        run_store.fail_run(run_id, error_message, error_type=error_type)
 
         record = run_store.get_record(run_id)
         if record is not None and run_store.get_report(run_id) is None:
@@ -325,10 +400,12 @@ async def run_workflow(
                     "status": "failed",
                     "success": False,
                     "conclusion": "fix",
-                    "summary": f"运行异常中断: {error_message}",
+                    "summary": report_summary,
+                    "error_type": error_type,
+                    "error_message": error_message,
                     "key_findings": [
                         *report.key_findings,
-                        f"异常: {error_message}",
+                        finding,
                     ],
                 }
             )

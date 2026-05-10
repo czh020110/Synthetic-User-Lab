@@ -62,6 +62,8 @@ def build_run_report(record: RunRecord, steps: list[StepLog]) -> RunReport:
         friction_signals=friction_signals,
         key_findings=final_key_findings,
         next_recommendations=recommendations,
+        error_type=record.error_type,
+        error_message=record.error_message,
     )
 
 
@@ -110,13 +112,19 @@ def _build_base_key_findings(
             findings.append(f"对应执行错误：{first_issue_step.execution_result.error_message}")
 
     if record.error_message:
-        findings.append(f"运行过程中出现异常中断：{record.error_message}")
+        findings.append(f"运行过程中出现{_format_error_type(record.error_type)}：{record.error_message}")
 
     persona_finding = _build_persona_impact_finding(record, friction_signals, success)
     if persona_finding:
         findings.append(persona_finding)
 
     return findings
+
+
+def _format_error_type(error_type: str | None) -> str:
+    if error_type == "model_error":
+        return "模型调用错误"
+    return "系统异常中断"
 
 
 def _build_persona_impact_finding(
@@ -238,6 +246,7 @@ def _build_recommendation_payload(
             "run_id": record.run_id,
             "status": record.status,
             "success": success,
+            "error_type": record.error_type,
             "error_message": record.error_message,
             "step_count": len(steps),
         },

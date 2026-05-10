@@ -150,3 +150,23 @@
   - 关联修改记录：introduction/修改记录/统一迁移提示词到-backend-prompt.md
   - 关联 Commit：统一迁移提示词到 backend-prompt
 
+- [x] 2026-05-10：T-001（P0）：在 `backend/graph/run_graph.py` 中接入模型 API 错误重试与格式错误重试护栏，区分决策/验证 agent 的接口失败和结构化回复失败。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/区分模型错误并增加重试护栏.md
+  - 关联 Commit：区分模型错误并增加重试护栏
+- [x] 2026-05-10：T-002（P0）：在 `backend/prompt/graph.py` 中补充格式重试提示词，并让决策/验证 agent 共用同一格式修正模板。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/区分模型错误并增加重试护栏.md
+  - 关联 Commit：区分模型错误并增加重试护栏
+- [x] 2026-05-10：T-003（P0）：在 `backend/schemas/run_schemas.py`、`backend/stores/in_memory_run_store.py` 与 `backend/analysis/report_builder.py` 中透出 `error_type` / `error_message`，让 run 状态与最终报告保留原始模型错误信息。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/区分模型错误并增加重试护栏.md
+  - 关联 Commit：区分模型错误并增加重试护栏
+- [x] 2026-05-10：T-004（P0）：为模型错误重试与格式重试补齐 `tests/test_validator.py` 回归，确认 demo run 仍能正常返回包含错误类型的失败报告。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/区分模型错误并增加重试护栏.md
+  - 关联 Commit：区分模型错误并增加重试护栏

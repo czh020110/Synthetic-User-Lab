@@ -117,3 +117,10 @@ max_steps:
 
 请只输出本步骤的验证结论。
 """.strip()
+
+format_retry_input = """
+上一次回复未能通过结构化格式校验。请只按指定 response_format 返回结构化结果，不要输出解释、Markdown 或多余字段。
+必须满足以下 JSON Schema：
+{schema}
+校验错误：{error}
+""".strip()
