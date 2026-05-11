@@ -140,7 +140,10 @@ def _build_wait_observation_finding(steps: list[StepLog]) -> str:
     for step in wait_steps:
         descriptions.append(
             f"第 {step.step_index} 步等待观察 {step.wait_observation_observations or 0} 次，"
-            f"最终状态为 {step.wait_observation_status}，原因：{step.wait_observation_reason or '无'}"
+            f"累计等待 {step.wait_observation_elapsed_ms or 0}ms，"
+            f"最终状态为 {step.wait_observation_status}，"
+            f"终止判断为 {step.wait_observation_terminal_decision or '无'}，"
+            f"原因：{step.wait_observation_reason or '无'}"
         )
     return "；".join(descriptions) + "。"
 
@@ -318,6 +321,9 @@ def _serialize_step(step: StepLog) -> dict[str, Any]:
         "wait_observation_status": step.wait_observation_status,
         "wait_observation_reason": step.wait_observation_reason,
         "wait_observation_observations": step.wait_observation_observations,
+        "wait_observation_elapsed_ms": step.wait_observation_elapsed_ms,
+        "wait_observation_timeout_ms": step.wait_observation_timeout_ms,
+        "wait_observation_terminal_decision": step.wait_observation_terminal_decision,
         "wait_observation_traces": step.wait_observation_traces,
     }
 

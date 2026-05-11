@@ -181,3 +181,14 @@
   - 验证方式：随本次提交验收
   - 关联修改记录：introduction/修改记录/接入等待观察分支以支撑恢复路径.md
   - 关联 Commit：接入等待观察分支以支撑恢复路径
+
+- [x] 2026-05-11：T-001（P0）：在 backend/graph/run_graph.py 中把 wait_after_action 从等待观察推进为一次受控恢复动作并重新验证，覆盖 actionable 与 timeout 分支。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/统一等待观察链路以支撑模型化动态等待.md
+  - 关联 Commit：统一等待观察链路以支撑模型化动态等待
+- [x] 2026-05-11：T-002（P0）：为等待观察与恢复链路补齐 tests/test_validator.py、tests/test_demo_run_api.py 与必要的 tests/test_report_builder.py 回归，确认 wait_observation_* 与最终 conclusion 在报告中稳定透出。
+  - 关联 TODO：自动迁移自上一次 TODO.md
+  - 验证方式：随本次提交验收
+  - 关联修改记录：introduction/修改记录/统一等待观察链路以支撑模型化动态等待.md
+  - 关联 Commit：统一等待观察链路以支撑模型化动态等待

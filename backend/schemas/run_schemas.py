@@ -13,6 +13,8 @@ from uuid import uuid4
 from pydantic import BaseModel, Field, model_validator
 
 ActionName = Literal["navigate", "click", "fill", "wait"]
+WaitObservationStatus = Literal["success", "actionable", "normal_timeout", "abnormal_stuck"]
+WaitObservationDecisionName = Literal["normal_waiting", "abnormal_stuck", "ready_for_next_action", "task_completed"]
 RunStatus = Literal["queued", "running", "succeeded", "failed"]
 RunErrorType = Literal["model_error", "system_error"]
 ValidationStatus = Literal["running", "succeeded", "failed"]
@@ -144,9 +146,12 @@ class StepLog(BaseModel):
     decided_action: ActionInput  # 动作输入(准备做什么)
     execution_result: ExecutionResult  # 动作执行结果
     validation_result: ValidationResult  # 动作验证结果
-    wait_observation_status: str | None = None  # 等待观察节点最终状态
+    wait_observation_status: WaitObservationStatus | None = None  # 等待观察节点最终状态
     wait_observation_reason: str | None = None  # 等待观察节点最终判断原因
     wait_observation_observations: int | None = None  # 等待观察节点观察次数
+    wait_observation_elapsed_ms: int | None = None  # 等待观察节点累计等待时长
+    wait_observation_timeout_ms: int | None = None  # 等待观察节点本次使用的超时上限
+    wait_observation_terminal_decision: WaitObservationDecisionName | None = None  # 等待观察节点终止时的模型判断
     wait_observation_traces: list[dict[str, Any]] = Field(default_factory=list)  # 每次等待观察模型判断记录
 
 

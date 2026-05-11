@@ -135,13 +135,18 @@ wait_observe = """
 输出要求：
 - 只输出一个 JSON 对象，不要输出 Markdown，不要输出解释性段落。
 - JSON 必须符合以下字段：
-  - decision：只能是 continue_waiting、ready_for_next_action、task_completed。
+  - decision：只能是 normal_waiting、abnormal_stuck、ready_for_next_action、task_completed。
   - reason：一句中文说明判断依据。
+  - next_wait_ms：下一次观察前建议等待的毫秒数；normal_waiting / abnormal_stuck 必须大于 0；ready_for_next_action / task_completed 可为 0。
 
 判断原则：
-- continue_waiting：页面仍在处理中、过渡中、反馈未结束，或当前状态还不足以确定下一步。
-- ready_for_next_action：页面已经稳定，并且已有明确可执行的下一步入口。
-- task_completed：页面已经满足 task.success_criteria，或页面已明确显示任务完成。
+- normal_waiting：页面有明确、正常的等待或处理中反馈，例如正在注册、处理中、请稍候、加载中、提交中，或任务语义上确实正在等待后端处理。
+- abnormal_stuck：页面没有明确正常等待提示，也没有可执行入口、没有错误提示、没有完成态，看起来无响应或无法推进。
+- ready_for_next_action：页面已经稳定，并且已有明确可执行的下一步入口，如按钮、链接、可填写字段、继续操作提示。
+- task_completed：页面已经满足 task.success_criteria，或页面明确显示任务完成、成功、已提交等。
+- 如果页面显示正常处理文案，不要判为 abnormal_stuck。
+- 如果页面已经有明确下一步入口，不要继续 normal_waiting。
+- next_wait_ms 由你根据当前页面状态决定，系统会做上下限保护。
 - 不要输出动作，不要输出 JSON 以外的内容。
 """.strip()
 
@@ -157,8 +162,11 @@ elapsed_ms:
 observations:
 {observations}
 
-remaining_ms:
-{remaining_ms}
+normal_remaining_ms:
+{normal_remaining_ms}
+
+abnormal_remaining_ms:
+{abnormal_remaining_ms}
 
 请只输出等待观察结论。
 """.strip()

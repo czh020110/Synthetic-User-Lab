@@ -183,6 +183,9 @@ async def init_session(state: RunState) -> dict:
     headless = settings.browser_headless if request.headless is None else request.headless
     logger.info("initializing run session, run_id=%s headless=%s", state["run_id"], headless)
     session = await create_browser_session(headless=headless)
+    session_box = state.get("session_box")
+    if session_box is not None:
+        session_box["session"] = session
     page = session["page"]
     task = state.get("task")
     if task is None:
@@ -263,7 +266,11 @@ async def execute_current_action(state: RunState) -> dict:
         "wait_observation_status": None,
         "wait_observation_reason": None,
         "wait_observation_observations": None,
+        "wait_observation_elapsed_ms": None,
+        "wait_observation_timeout_ms": None,
+        "wait_observation_terminal_decision": None,
         "wait_observation_traces": None,
+        "wait_observation_round": None,
     }
 
 
@@ -280,14 +287,23 @@ async def wait_after_action(state: RunState) -> dict:
     page = session["page"]
     options = WaitObservationOptions()
 
-    async def classify_fn(page_state, elapsed_ms: int, observations: int):
+    wait_step_index = (state.get("wait_observation_round") or 0) + 1
+
+    async def classify_fn(
+        page_state,
+        elapsed_ms: int,
+        observations: int,
+        normal_remaining_ms: int,
+        abnormal_remaining_ms: int,
+    ):
         agent_messages = wait_observe_input_prompt.format_messages(
             current_page_state=page_state.model_dump_json(indent=2),
             elapsed_ms=elapsed_ms,
             observations=observations,
-            remaining_ms=max(0, options.timeout_ms - elapsed_ms),
+            normal_remaining_ms=normal_remaining_ms,
+            abnormal_remaining_ms=abnormal_remaining_ms,
         )
-        agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:wait"}}
+        agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:wait:{wait_step_index}"}}
         return cast(
             WaitObservationDecision,
             await _invoke_agent_with_retries(
@@ -305,8 +321,21 @@ async def wait_after_action(state: RunState) -> dict:
         "wait_observation_status": result.status,
         "wait_observation_reason": result.reason,
         "wait_observation_observations": result.observations,
+        "wait_observation_elapsed_ms": result.elapsed_ms,
+        "wait_observation_timeout_ms": result.timeout_ms,
+        "wait_observation_terminal_decision": result.terminal_decision,
         "wait_observation_traces": [asdict(trace) for trace in result.traces],
+        "wait_observation_round": wait_step_index,
     }
+
+
+def route_after_execute(state: RunState) -> str:
+    """wait 动作统一交给等待观察节点处理。"""
+ 
+    action = state.get("current_action")
+    if action is not None and action.action == "wait":
+        return "wait_after_action"
+    return "observe_after_action"
 
 
 def route_after_validate(state: RunState) -> str:
@@ -326,13 +355,22 @@ def route_after_validate(state: RunState) -> str:
     return "log_step"
 
 
-def _build_wait_timeout_validation(reason: str) -> ValidationResult:
+def _build_wait_failure_validation(reason: str, signal: str) -> ValidationResult:
     return ValidationResult(
         status="failed",
         should_stop=True,
         progress_summary=reason,
-        friction_signals=["wait_observe_timeout"],
+        friction_signals=[signal],
         detected_error=True,
+    )
+
+
+def _build_wait_success_validation(reason: str) -> ValidationResult:
+    return ValidationResult(
+        status="succeeded",
+        should_stop=True,
+        progress_summary=reason,
+        detected_success=True,
     )
 
 
@@ -359,8 +397,18 @@ async def validate_current_progress(state: RunState) -> dict:
     wait_status = state.get("wait_observation_status")
     current_action = state.get("current_action")
     action_json = current_action.model_dump_json(indent=2) if current_action is not None else "null"
-    if wait_status == "timeout":
-        validation = _build_wait_timeout_validation(state.get("wait_observation_reason") or "等待页面进入可继续状态超时。")
+    if wait_status == "normal_timeout":
+        validation = _build_wait_failure_validation(
+            state.get("wait_observation_reason") or "页面正常等待超过上限，仍未进入下一步或完成状态。",
+            "wait_observe_normal_timeout",
+        )
+    elif wait_status == "abnormal_stuck":
+        validation = _build_wait_failure_validation(
+            state.get("wait_observation_reason") or "页面疑似异常卡住，短时间等待后仍无恢复。",
+            "wait_observe_abnormal_stuck",
+        )
+    elif wait_status == "success":
+        validation = _build_wait_success_validation(state.get("wait_observation_reason") or "等待观察确认任务已完成。")
     else:
         agent_messages = validate_input_prompt.format_messages(
             latest_page_state=page_state.model_dump_json(indent=2),
@@ -418,6 +466,9 @@ def log_current_step(state: RunState) -> dict:
     wait_observation_status = state.get("wait_observation_status")
     wait_observation_reason = state.get("wait_observation_reason")
     wait_observation_observations = state.get("wait_observation_observations")
+    wait_observation_elapsed_ms = state.get("wait_observation_elapsed_ms")
+    wait_observation_timeout_ms = state.get("wait_observation_timeout_ms")
+    wait_observation_terminal_decision = state.get("wait_observation_terminal_decision")
     wait_observation_traces = state.get("wait_observation_traces") or []
     step_log = StepLog(
         step_index=step_index,
@@ -428,6 +479,9 @@ def log_current_step(state: RunState) -> dict:
         wait_observation_status=wait_observation_status,
         wait_observation_reason=wait_observation_reason,
         wait_observation_observations=wait_observation_observations,
+        wait_observation_elapsed_ms=wait_observation_elapsed_ms,
+        wait_observation_timeout_ms=wait_observation_timeout_ms,
+        wait_observation_terminal_decision=wait_observation_terminal_decision,
         wait_observation_traces=wait_observation_traces,
     )
     updated_steps = [*step_logs, step_log]
@@ -454,6 +508,9 @@ async def finalize_report(state: RunState) -> dict:
         return {"report": report}
     finally:
         await close_browser_session(state.get("session"))
+        session_box = state.get("session_box")
+        if session_box is not None:
+            session_box["closed"] = True
 
 
 def build_run_graph(load_context_node: Any):
@@ -476,7 +533,11 @@ def build_run_graph(load_context_node: Any):
     workflow.add_edge("init_session", "observe_page")
     workflow.add_edge("observe_page", "decide_action")
     workflow.add_edge("decide_action", "execute_action")
-    workflow.add_edge("execute_action", "observe_after_action")
+    workflow.add_conditional_edges(
+        "execute_action",
+        route_after_execute,
+        {"wait_after_action": "wait_after_action", "observe_after_action": "observe_after_action"},
+    )
     workflow.add_edge("observe_after_action", "validate_progress")
     workflow.add_conditional_edges(
         "validate_progress",
@@ -508,6 +569,7 @@ async def run_workflow(
         "request": request,
         "app_base_url": app_base_url,
         "screenshot_dir": screenshot_dir,
+        "session_box": {},
     }
 
     try:
@@ -540,3 +602,9 @@ async def run_workflow(
             )
             run_store.complete_run(run_id, report)
         raise
+    finally:
+        session_box = initial_state.get("session_box") or {}
+        session = session_box.get("session")
+        if session is not None and not session_box.get("closed", False):
+            await close_browser_session(session)
+            session_box["closed"] = True

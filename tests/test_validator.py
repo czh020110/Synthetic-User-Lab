@@ -38,7 +38,7 @@ def make_page_state(url: str = START_URL, text: str = "提交体验表单", erro
     )
 
 
-def make_action(action: ActionName, target: str = "#start-demo", value: str | None = None) -> ActionInput:
+def make_action(action: ActionName, target: str | None = "#start-demo", value: str | int | None = None) -> ActionInput:
     return ActionInput(action=action, target=target, value=value, reason="test")
 
 
@@ -88,6 +88,16 @@ def test_action_input_allows_wait_without_target() -> None:
     assert action.action == "wait"
     assert action.target is None
     assert action.value == 2000
+
+
+def test_route_after_execute_wait_goes_to_wait_node() -> None:
+    state = cast(Any, {"current_action": make_action("wait", target=None, value=1000)})
+    assert run_graph.route_after_execute(state) == "wait_after_action"
+
+
+def test_route_after_execute_non_wait_goes_to_observe_after_action() -> None:
+    state = cast(Any, {"current_action": make_action("click", target="#submit-demo")})
+    assert run_graph.route_after_execute(state) == "observe_after_action"
 
 
 def test_validate_progress_success() -> None:
@@ -388,11 +398,24 @@ def test_wait_after_action_records_wait_observation(monkeypatch) -> None:
 
     async def fake_observe_until_ready(_page, **_kwargs):
         return WaitObservationResult(
-            "success",
-            page_state,
-            3,
-            "模型判断任务已经完成。",
-            [WaitObservationTrace(1, 0, "continue_waiting", "仍在处理中。")],
+            status="success",
+            page_state=page_state,
+            observations=3,
+            reason="模型判断任务已经完成。",
+            elapsed_ms=3000,
+            timeout_ms=600000,
+            terminal_decision="task_completed",
+            traces=[
+                WaitObservationTrace(
+                    observation_index=1,
+                    elapsed_ms=0,
+                    normal_wait_elapsed_ms=0,
+                    abnormal_wait_elapsed_ms=0,
+                    decision="normal_waiting",
+                    reason="仍在处理中。",
+                    next_wait_ms=2000,
+                )
+            ],
         )
 
     monkeypatch.setattr(run_graph, "observe_until_ready", fake_observe_until_ready)
@@ -410,12 +433,18 @@ def test_wait_after_action_records_wait_observation(monkeypatch) -> None:
     assert result["wait_observation_status"] == "success"
     assert result["wait_observation_reason"] == "模型判断任务已经完成。"
     assert result["wait_observation_observations"] == 3
+    assert result["wait_observation_elapsed_ms"] == 3000
+    assert result["wait_observation_timeout_ms"] == 600000
+    assert result["wait_observation_terminal_decision"] == "task_completed"
     assert result["wait_observation_traces"] == [
         {
             "observation_index": 1,
             "elapsed_ms": 0,
-            "decision": "continue_waiting",
+            "normal_wait_elapsed_ms": 0,
+            "abnormal_wait_elapsed_ms": 0,
+            "decision": "normal_waiting",
             "reason": "仍在处理中。",
+            "next_wait_ms": 2000,
         }
     ]
 
@@ -450,7 +479,29 @@ def test_route_after_validate_logs_when_wait_already_happened() -> None:
     assert run_graph.route_after_validate(state) == "log_step"
 
 
-def test_validate_current_progress_skips_agent_when_wait_observe_times_out() -> None:
+def test_validate_current_progress_uses_agent_after_actionable_wait() -> None:
+    state = cast(Any, {
+        "run_id": "run-actionable-wait",
+        "session": {"page": object()},
+        "task": Task(start_url=START_URL),
+        "persona": Persona(),
+        "step_logs": [],
+        "current_step_index": 0,
+        "current_page_state": make_page_state(text="页面已有下一步入口"),
+        "current_action": make_action("wait", target=None, value=1000),
+        "current_execution_result": make_execution_result("wait"),
+        "wait_observation_status": "actionable",
+        "wait_observation_reason": "页面已有下一步入口。",
+        "validate_agent": FakeValidateAgent(),
+    })
+
+    result = asyncio.run(run_graph.validate_current_progress(state))
+
+    assert result["current_validation_result"].status == "succeeded"
+    assert result["should_stop"] is True
+
+
+def test_validate_current_progress_handles_normal_wait_timeout() -> None:
     state = cast(Any, {
         "run_id": "run-wait-timeout",
         "session": {"page": object()},
@@ -461,8 +512,8 @@ def test_validate_current_progress_skips_agent_when_wait_observe_times_out() -> 
         "current_page_state": make_page_state(text="正在注册，请稍候..."),
         "current_action": make_action("click", target="#submit-demo"),
         "current_execution_result": make_execution_result("click"),
-        "wait_observation_status": "timeout",
-        "wait_observation_reason": "等待页面进入可继续状态超时。",
+        "wait_observation_status": "normal_timeout",
+        "wait_observation_reason": "页面正常等待超过上限，仍未进入下一步或完成状态。",
         "validate_agent": FailIfCalledValidateAgent(),
     })
 
@@ -471,7 +522,32 @@ def test_validate_current_progress_skips_agent_when_wait_observe_times_out() -> 
     validation = result["current_validation_result"]
     assert validation.status == "failed"
     assert validation.should_stop is True
-    assert "wait_observe_timeout" in validation.friction_signals
+    assert "wait_observe_normal_timeout" in validation.friction_signals
+    assert result["should_stop"] is True
+
+
+def test_validate_current_progress_handles_abnormal_stuck_timeout() -> None:
+    state = cast(Any, {
+        "run_id": "run-abnormal-stuck",
+        "session": {"page": object()},
+        "task": Task(start_url=START_URL),
+        "persona": Persona(),
+        "step_logs": [],
+        "current_step_index": 0,
+        "current_page_state": make_page_state(text="空白页面"),
+        "current_action": make_action("wait", target=None, value=1000),
+        "current_execution_result": make_execution_result("wait"),
+        "wait_observation_status": "abnormal_stuck",
+        "wait_observation_reason": "页面疑似异常卡住，连续 30 秒没有恢复为正常等待、可操作或完成状态。",
+        "validate_agent": FailIfCalledValidateAgent(),
+    })
+
+    result = asyncio.run(run_graph.validate_current_progress(state))
+
+    validation = result["current_validation_result"]
+    assert validation.status == "failed"
+    assert validation.should_stop is True
+    assert "wait_observe_abnormal_stuck" in validation.friction_signals
     assert result["should_stop"] is True
 
 
@@ -500,18 +576,27 @@ def test_log_current_step_includes_wait_observation_details() -> None:
         "wait_observation_status": "success",
         "wait_observation_reason": "模型判断任务已经完成。",
         "wait_observation_observations": 2,
+        "wait_observation_elapsed_ms": 2000,
+        "wait_observation_timeout_ms": 600000,
+        "wait_observation_terminal_decision": "task_completed",
         "wait_observation_traces": [
             {
                 "observation_index": 1,
                 "elapsed_ms": 0,
-                "decision": "continue_waiting",
+                "normal_wait_elapsed_ms": 0,
+                "abnormal_wait_elapsed_ms": 0,
+                "decision": "normal_waiting",
                 "reason": "仍在处理中。",
+                "next_wait_ms": 2000,
             },
             {
                 "observation_index": 2,
                 "elapsed_ms": 2000,
+                "normal_wait_elapsed_ms": 2000,
+                "abnormal_wait_elapsed_ms": 0,
                 "decision": "task_completed",
                 "reason": "已显示成功。",
+                "next_wait_ms": 0,
             },
         ],
     })

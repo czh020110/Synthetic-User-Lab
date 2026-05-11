@@ -22,6 +22,8 @@ from backend.schemas.run_schemas import (
     StepLog,
     Task,
     ValidationResult,
+    WaitObservationDecisionName,
+    WaitObservationStatus,
 )
 
 # 主Graph状态
@@ -35,16 +37,21 @@ class RunState(TypedDict):
     task: NotRequired[Task]
     session: NotRequired[dict[str, Any]]
     current_page_state: NotRequired[ObservedPageState]
+    session_box: NotRequired[dict[str, Any]]
     current_action: NotRequired[ActionInput]
     current_execution_result: NotRequired[ExecutionResult]
     current_validation_result: NotRequired[ValidationResult]
     step_logs: NotRequired[list[StepLog]]
     current_step_index: NotRequired[int]
     should_stop: NotRequired[bool]
-    wait_observation_status: NotRequired[str | None]
+    wait_observation_status: NotRequired[WaitObservationStatus | None]
     wait_observation_reason: NotRequired[str | None]
     wait_observation_observations: NotRequired[int | None]
+    wait_observation_elapsed_ms: NotRequired[int | None]
+    wait_observation_timeout_ms: NotRequired[int | None]
+    wait_observation_terminal_decision: NotRequired[WaitObservationDecisionName | None]
     wait_observation_traces: NotRequired[list[dict[str, Any]] | None]
+    wait_observation_round: NotRequired[int | None]
     wait_agent: NotRequired[Any]
     decide_agent: NotRequired[Any]
     validate_agent: NotRequired[Any]

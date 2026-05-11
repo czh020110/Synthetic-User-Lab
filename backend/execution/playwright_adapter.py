@@ -62,9 +62,8 @@ async def execute_action(page: Any, action: ActionInput, screenshot_path: Path |
             if action.target is None:
                 raise ValueError("fill action requires target.")
             await page.locator(action.target).fill(str(action.value or ""))
-        elif action.action == "wait":  # 等待一段时间
-            timeout_ms = int(action.value or 300)
-            await page.wait_for_timeout(timeout_ms)
+        elif action.action == "wait":  # 等待动作交由 graph 等待观察节点处理
+            pass
         else:  # 其他不支持动作直接报错
             raise ValueError(f"Unsupported action: {action.action}")
 
@@ -74,10 +73,11 @@ async def execute_action(page: Any, action: ActionInput, screenshot_path: Path |
             await page.screenshot(path=str(screenshot_path), full_page=True)  # 截取整页图片
             screenshot_value = str(screenshot_path)
         # 动作没出错直接返回成功结果
+        detail = "wait 动作已进入等待观察节点处理。" if action.action == "wait" else f"动作 {action.action} 执行成功。"
         return ExecutionResult(
             action=action.action,
             success=True,
-            detail=f"动作 {action.action} 执行成功。",
+            detail=detail,
             screenshot_path=screenshot_value,
             current_url_after_action=page.url,
         )
