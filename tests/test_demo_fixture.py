@@ -9,7 +9,7 @@ def test_demo_site_contains_waiting_loading_state() -> None:
     assert "loading-card" in html
     assert "正在注册" in html
     assert "setTimeout" in html
-    assert "10000" in html
+    assert "30000" in html
     assert "success-card" in html
 
 

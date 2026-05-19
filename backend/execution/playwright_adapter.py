@@ -7,7 +7,6 @@ from __future__ import annotations
 # 模块接口说明: create_browser_session/close_browser_session/execute_action 为执行层核心入口
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from backend.schemas.run_schemas import ActionInput, ExecutionResult
@@ -45,8 +44,8 @@ async def close_browser_session(session: dict[str, Any] | None) -> None:
     if playwright is not None:
         await playwright.stop()
 
-# page: Playwright 页面对象, action: 要执行的动作, screenshot path: 可选截图路径
-async def execute_action(page: Any, action: ActionInput, screenshot_path: Path | None = None) -> ExecutionResult:
+# page: Playwright 页面对象, action: 要执行的动作
+async def execute_action(page: Any, action: ActionInput) -> ExecutionResult:
     """执行单个受控动作并返回结果。"""
 
     try:
@@ -67,32 +66,16 @@ async def execute_action(page: Any, action: ActionInput, screenshot_path: Path |
         else:  # 其他不支持动作直接报错
             raise ValueError(f"Unsupported action: {action.action}")
 
-        screenshot_value = None
-        if screenshot_path is not None:
-            screenshot_path.parent.mkdir(parents=True, exist_ok=True)
-            await page.screenshot(path=str(screenshot_path), full_page=True)  # 截取整页图片
-            screenshot_value = str(screenshot_path)
-        # 动作没出错直接返回成功结果
         detail = "wait 动作已进入等待观察节点处理。" if action.action == "wait" else f"动作 {action.action} 执行成功。"
         return ExecutionResult(
             action=action.action,
             success=True,
             detail=detail,
-            screenshot_path=screenshot_value,
-            current_url_after_action=page.url,
         )
     except Exception as exc:
-        screenshot_value = None
-        if screenshot_path is not None:  # 失败时也会保存截图
-            screenshot_path.parent.mkdir(parents=True, exist_ok=True)
-            await page.screenshot(path=str(screenshot_path), full_page=True)
-            screenshot_value = str(screenshot_path)
-        # 返回结果
         return ExecutionResult(
             action=action.action,
             success=False,
             detail=f"动作 {action.action} 执行失败。",
-            screenshot_path=screenshot_value,
-            current_url_after_action=page.url,
             error_message=str(exc),
         )

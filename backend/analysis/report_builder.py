@@ -303,10 +303,7 @@ def _build_recommendation_payload(
 def _serialize_step(step: StepLog) -> dict[str, Any]:
     return {
         "step_index": step.step_index,
-        "page_url": step.observed_page_state.current_url,
-        "page_title": step.observed_page_state.title,
-        "visible_text_summary": step.observed_page_state.visible_text_summary,
-        "page_errors": step.observed_page_state.error_messages,
+        "before_page_state": step.observed_page_state.model_dump(mode="json"),
         "action": step.decided_action.action,
         "target": step.decided_action.target,
         "action_reason": step.decided_action.reason,
@@ -318,6 +315,7 @@ def _serialize_step(step: StepLog) -> dict[str, Any]:
         "validation_friction_signals": step.validation_result.friction_signals,
         "detected_success": step.validation_result.detected_success,
         "detected_error": step.validation_result.detected_error,
+        "after_page_state": step.post_action_page_state.model_dump(mode="json"),
         "wait_observation_status": step.wait_observation_status,
         "wait_observation_reason": step.wait_observation_reason,
         "wait_observation_observations": step.wait_observation_observations,

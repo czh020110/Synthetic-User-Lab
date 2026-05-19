@@ -230,6 +230,7 @@ def test_observe_until_ready_keeps_abnormal_budget_after_normal_waiting() -> Non
     assert page.wait_calls == [2, 1, 1]
 
 
+def test_observe_until_ready_clamps_invalid_wait_ms() -> None:
     page = FakePage()
     states = [make_page_state(text="状态 A"), make_page_state(text="状态 B")]
     decisions = [

@@ -1,4 +1,9 @@
+# 技术栈：Python 3.10 + Pydantic + Playwright
+# 作用：把页面观察、模型判断和受控等待收敛成一条可追踪的等待链路。
+
 from __future__ import annotations
+
+import time
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -34,6 +39,7 @@ class WaitObservationTrace:
     decision: WaitObservationDecisionName
     reason: str
     next_wait_ms: int
+    screenshot_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -49,19 +55,23 @@ class WaitObservationResult:
 
 
 DecisionFn = Callable[[ObservedPageState, int, int, int, int], Awaitable[WaitObservationDecision]]
+CaptureTraceScreenshotFn = Callable[[int], Awaitable[str | None]]
 
 
+# 根据模型给出的等待时长、剩余预算和配置参数，裁剪出单次可执行的等待时间。
 def _clamp_wait_ms(raw_wait_ms: int, remaining_ms: int, options: WaitObservationOptions) -> int:
     wait_ms = raw_wait_ms if raw_wait_ms > 0 else options.default_wait_ms
     wait_ms = max(options.min_wait_ms, min(wait_ms, options.max_wait_ms))
     return min(wait_ms, remaining_ms)
 
 
+# 持续观察页面并按模型决策等待、结束或返回可操作状态，同时记录每轮轨迹。
 async def observe_until_ready(
     page: Any,
     *,
     classify_fn: DecisionFn,
     observe_fn: Callable[[Any], Awaitable[ObservedPageState]] = observe_page,
+    capture_trace_screenshot_fn: CaptureTraceScreenshotFn | None = None,
     options: WaitObservationOptions = WaitObservationOptions(),
 ) -> WaitObservationResult:
     elapsed_ms = 0
@@ -71,6 +81,7 @@ async def observe_until_ready(
     traces: list[WaitObservationTrace] = []
 
     while True:
+        loop_started_at = time.monotonic()
         page_state = await observe_fn(page)
         observations += 1
         normal_remaining_ms = max(0, options.normal_timeout_ms - normal_wait_elapsed_ms)
@@ -82,6 +93,18 @@ async def observe_until_ready(
             normal_remaining_ms,
             abnormal_remaining_ms,
         )
+        screenshot_path = (
+            await capture_trace_screenshot_fn(observations)
+            if capture_trace_screenshot_fn is not None
+            else None
+        )
+        processing_ms = max(0, int((time.monotonic() - loop_started_at) * 1000))
+        elapsed_ms += processing_ms
+        if decision.decision in {"normal_waiting", "abnormal_stuck"}:
+            if decision.decision == "normal_waiting":
+                normal_wait_elapsed_ms += processing_ms
+            else:
+                abnormal_wait_elapsed_ms += processing_ms
 
         if decision.decision == "task_completed":
             traces.append(
@@ -93,6 +116,7 @@ async def observe_until_ready(
                     decision.decision,
                     decision.reason,
                     0,
+                    screenshot_path,
                 )
             )
             return WaitObservationResult(
@@ -116,6 +140,7 @@ async def observe_until_ready(
                     decision.decision,
                     decision.reason,
                     0,
+                    screenshot_path,
                 )
             )
             return WaitObservationResult(
@@ -141,6 +166,7 @@ async def observe_until_ready(
                         decision.decision,
                         decision.reason,
                         0,
+                        screenshot_path,
                     )
                 )
                 return WaitObservationResult(
@@ -163,6 +189,7 @@ async def observe_until_ready(
                     decision.decision,
                     decision.reason,
                     wait_ms,
+                    screenshot_path,
                 )
             )
             await page.wait_for_timeout(wait_ms)
@@ -181,6 +208,7 @@ async def observe_until_ready(
                     decision.decision,
                     decision.reason,
                     0,
+                    screenshot_path,
                 )
             )
             return WaitObservationResult(
@@ -203,6 +231,7 @@ async def observe_until_ready(
                 decision.decision,
                 decision.reason,
                 wait_ms,
+                screenshot_path,
             )
         )
         await page.wait_for_timeout(wait_ms)

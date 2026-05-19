@@ -93,6 +93,7 @@ class ObservedPageState(BaseModel):
     clickable_elements: list[ObservedElement] = Field(default_factory=list)  # 页面上可点击元素列表
     form_fields: list[FormFieldState] = Field(default_factory=list)  # 页面上表单字段列表
     error_messages: list[str] = Field(default_factory=list)  # 页面上检测到的错误信息列表，如表单验证错误、加载失败等
+    screenshot_path: str | None = None  # 本次页面观察对应的截图路径
 
 
 class ActionInput(BaseModel):
@@ -122,8 +123,6 @@ class ExecutionResult(BaseModel):
     action: ActionName  # 实际执行动作:click/fill/navagate...
     success: bool  # 是否执行成功?
     detail: str  # 执行结果的文字说明
-    screenshot_path: str | None = None  # 本次动作后的截图路径
-    current_url_after_action: str | None = None  # 执行完成后的URL(用于确认页面是否成功跳转)
     error_message: str | None = None  # 执行失败的错误信息
 
 
@@ -146,6 +145,7 @@ class StepLog(BaseModel):
     decided_action: ActionInput  # 动作输入(准备做什么)
     execution_result: ExecutionResult  # 动作执行结果
     validation_result: ValidationResult  # 动作验证结果
+    post_action_page_state: ObservedPageState  # 动作/等待结束后的页面观察结果
     wait_observation_status: WaitObservationStatus | None = None  # 等待观察节点最终状态
     wait_observation_reason: str | None = None  # 等待观察节点最终判断原因
     wait_observation_observations: int | None = None  # 等待观察节点观察次数

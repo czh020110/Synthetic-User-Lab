@@ -196,7 +196,7 @@ async def init_session(state: RunState) -> dict:
 
 
 async def observe_current_page(state: RunState) -> dict:
-    """观察当前页面。"""
+    """记录动作前或下一轮开始前的页面观察。"""
 
     session = state.get("session")
     if session is None:
@@ -204,6 +204,26 @@ async def observe_current_page(state: RunState) -> dict:
     page = session["page"]
     page_state = await observe_page(page)
     return {"current_page_state": page_state}
+
+
+async def observe_after_action(state: RunState) -> dict:
+    """记录动作后的页面快照。"""
+
+    session = state.get("session")
+    if session is None:
+        raise ValueError("Session is missing before post-action observation.")
+
+    page = session["page"]
+    step_index = state.get("current_step_index", 0) + 1
+    after_screenshot_path = Path(state["screenshot_dir"]) / state["run_id"] / f"step-{step_index}-after.png"
+    page_state = await observe_page(page)
+    page_state = page_state.model_copy(update={"screenshot_path": str(after_screenshot_path)})
+    after_screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+    await page.screenshot(path=str(after_screenshot_path), full_page=True)
+    return {
+        "current_page_state": page_state,
+        "post_action_page_state": page_state,
+    }
 
 
 async def decide_next_action(state: RunState) -> dict:
@@ -249,20 +269,27 @@ async def decide_next_action(state: RunState) -> dict:
 
 
 async def execute_current_action(state: RunState) -> dict:
-    """执行当前动作并截图。"""
+    """执行当前动作并记录动作前页面快照。"""
 
     session = state.get("session")
     action = state.get("current_action")
+    before_page_state = state.get("current_page_state")
     current_step_index = state.get("current_step_index", 0)
-    if session is None or action is None:
-        raise ValueError("Session or action is missing before action execution.")
+    if session is None or action is None or before_page_state is None:
+        raise ValueError("Session, action, or page state is missing before action execution.")
 
     page = session["page"]
     step_index = current_step_index + 1
-    screenshot_path = Path(state["screenshot_dir"]) / state["run_id"] / f"step-{step_index}.png"
-    result = await execute_action(page, action, screenshot_path=screenshot_path)
+    before_screenshot_path = Path(state["screenshot_dir"]) / state["run_id"] / f"step-{step_index}-before.png"
+    step_before_page_state = before_page_state.model_copy(update={"screenshot_path": str(before_screenshot_path)})
+    before_screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+    await page.screenshot(path=str(before_screenshot_path), full_page=True)
+
+    result = await execute_action(page, action)
     return {
         "current_execution_result": result,
+        "step_before_page_state": step_before_page_state,
+        "post_action_page_state": None,
         "wait_observation_status": None,
         "wait_observation_reason": None,
         "wait_observation_observations": None,
@@ -285,6 +312,7 @@ async def wait_after_action(state: RunState) -> dict:
         raise ValueError("Wait observation prerequisites are missing.")
 
     page = session["page"]
+    step_index = state.get("current_step_index", 0) + 1
     options = WaitObservationOptions()
 
     wait_step_index = (state.get("wait_observation_round") or 0) + 1
@@ -315,9 +343,27 @@ async def wait_after_action(state: RunState) -> dict:
             ),
         )
 
-    result = await observe_until_ready(page, classify_fn=classify_fn, options=options)
+    async def capture_trace_screenshot_fn(observation_index: int) -> str | None:
+        screenshot_path = Path(state["screenshot_dir"]) / state["run_id"] / f"step-{step_index}-wait-{observation_index}.png"
+        screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+        await page.screenshot(path=str(screenshot_path), full_page=True)
+        return str(screenshot_path)
+
+    result = await observe_until_ready(
+        page,
+        classify_fn=classify_fn,
+        capture_trace_screenshot_fn=capture_trace_screenshot_fn,
+        options=options,
+    )
+
+    final_screenshot_path = Path(state["screenshot_dir"]) / state["run_id"] / f"step-{step_index}-after.png"
+    final_screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+    await page.screenshot(path=str(final_screenshot_path), full_page=True)
+    post_action_page_state = result.page_state.model_copy(update={"screenshot_path": str(final_screenshot_path)})
+
     return {
-        "current_page_state": result.page_state,
+        "current_page_state": post_action_page_state,
+        "post_action_page_state": post_action_page_state,
         "wait_observation_status": result.status,
         "wait_observation_reason": result.reason,
         "wait_observation_observations": result.observations,
@@ -453,13 +499,14 @@ async def validate_current_progress(state: RunState) -> dict:
 def log_current_step(state: RunState) -> dict:
     """写入当前步骤日志。"""
 
-    page_state = state.get("current_page_state")
+    page_state = state.get("step_before_page_state")
+    post_action_page_state = state.get("post_action_page_state")
     action = state.get("current_action")
     execution_result = state.get("current_execution_result")
     validation_result = state.get("current_validation_result")
     current_step_index = state.get("current_step_index", 0)
     step_logs = state.get("step_logs", [])
-    if page_state is None or action is None or execution_result is None or validation_result is None:
+    if page_state is None or post_action_page_state is None or action is None or execution_result is None or validation_result is None:
         raise ValueError("Step log prerequisites are missing.")
 
     step_index = current_step_index + 1
@@ -476,6 +523,7 @@ def log_current_step(state: RunState) -> dict:
         decided_action=action,
         execution_result=execution_result,
         validation_result=validation_result,
+        post_action_page_state=post_action_page_state,
         wait_observation_status=wait_observation_status,
         wait_observation_reason=wait_observation_reason,
         wait_observation_observations=wait_observation_observations,
@@ -520,7 +568,7 @@ def build_run_graph(load_context_node: Any):
     workflow.add_node("load_context", load_context_node)
     workflow.add_node("init_session", init_session)
     workflow.add_node("observe_page", observe_current_page)
-    workflow.add_node("observe_after_action", observe_current_page)
+    workflow.add_node("observe_after_action", observe_after_action)
     workflow.add_node("decide_action", decide_next_action)
     workflow.add_node("execute_action", execute_current_action)
     workflow.add_node("wait_after_action", wait_after_action)

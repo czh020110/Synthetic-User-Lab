@@ -37,6 +37,8 @@ class RunState(TypedDict):
     task: NotRequired[Task]
     session: NotRequired[dict[str, Any]]
     current_page_state: NotRequired[ObservedPageState]
+    step_before_page_state: NotRequired[ObservedPageState]
+    post_action_page_state: NotRequired[ObservedPageState]
     session_box: NotRequired[dict[str, Any]]
     current_action: NotRequired[ActionInput]
     current_execution_result: NotRequired[ExecutionResult]

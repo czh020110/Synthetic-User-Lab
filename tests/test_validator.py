@@ -47,13 +47,11 @@ def make_execution_result(
     success: bool = True,
     detail: str = "ok",
     error_message: str | None = None,
-    url: str = START_URL,
 ) -> ExecutionResult:
     return ExecutionResult(
         action=action,
         success=success,
         detail=detail,
-        current_url_after_action=url,
         error_message=error_message,
     )
 
@@ -70,8 +68,9 @@ def make_step(
     error_message: str | None = None,
 ) -> StepLog:
     observed_page_state = make_page_state(url=url, text=text)
+    post_action_page_state = make_page_state(url=url, text=text)
     decided_action = make_action(action, target=target)
-    execution_result = make_execution_result(action, success=success, detail=detail, error_message=error_message, url=url)
+    execution_result = make_execution_result(action, success=success, detail=detail, error_message=error_message)
     validation_result = ValidationResult(status="running", should_stop=False, progress_summary="继续")
     return StepLog(
         step_index=step_index,
@@ -79,6 +78,7 @@ def make_step(
         decided_action=decided_action,
         execution_result=execution_result,
         validation_result=validation_result,
+        post_action_page_state=post_action_page_state,
     )
 
 
@@ -306,7 +306,7 @@ def test_validate_progress_off_track_requests_recovery() -> None:
         make_step(2, url=OTHER_URL, action="wait", target="body"),
     ]
     page_state = make_page_state(url=OTHER_URL, text="陌生页面")
-    execution_result = make_execution_result("wait", url=OTHER_URL)
+    execution_result = make_execution_result("wait")
 
     result = validate_progress(
         task,
@@ -396,7 +396,22 @@ def test_validate_current_progress_applies_guardrails(monkeypatch) -> None:
 def test_wait_after_action_records_wait_observation(monkeypatch) -> None:
     page_state = make_page_state(text="提交成功")
 
-    async def fake_observe_until_ready(_page, **_kwargs):
+    class FakePage:
+        def __init__(self) -> None:
+            self.url = START_URL
+            self.screenshot_calls: list[str] = []
+
+        async def screenshot(self, path: str, full_page: bool = True) -> None:
+            del full_page
+            self.screenshot_calls.append(path)
+
+    fake_page = FakePage()
+
+    async def fake_observe_until_ready(_page, *, classify_fn=None, observe_fn=None, capture_trace_screenshot_fn=None, options=None):
+        del _page, classify_fn, observe_fn, options
+        wait_screenshot = None
+        if capture_trace_screenshot_fn is not None:
+            wait_screenshot = await capture_trace_screenshot_fn(1)
         return WaitObservationResult(
             status="success",
             page_state=page_state,
@@ -414,22 +429,28 @@ def test_wait_after_action_records_wait_observation(monkeypatch) -> None:
                     decision="normal_waiting",
                     reason="仍在处理中。",
                     next_wait_ms=2000,
+                    screenshot_path=wait_screenshot,
                 )
             ],
         )
 
     monkeypatch.setattr(run_graph, "observe_until_ready", fake_observe_until_ready)
     state = cast(Any, {
-        "session": {"page": object()},
+        "session": {"page": fake_page},
         "task": Task(start_url=START_URL),
         "persona": Persona(),
         "wait_agent": object(),
         "current_action": make_action("click", target="#submit-demo"),
+        "current_execution_result": make_execution_result("click"),
+        "current_step_index": 0,
+        "screenshot_dir": Path("screenshots"),
+        "run_id": "run-wait-observation",
     })
 
     result = asyncio.run(run_graph.wait_after_action(state))
 
-    assert result["current_page_state"] == page_state
+    assert result["post_action_page_state"].screenshot_path.endswith("step-1-after.png")
+    assert fake_page.screenshot_calls[-1].endswith("step-1-after.png")
     assert result["wait_observation_status"] == "success"
     assert result["wait_observation_reason"] == "模型判断任务已经完成。"
     assert result["wait_observation_observations"] == 3
@@ -445,6 +466,7 @@ def test_wait_after_action_records_wait_observation(monkeypatch) -> None:
             "decision": "normal_waiting",
             "reason": "仍在处理中。",
             "next_wait_ms": 2000,
+            "screenshot_path": result["wait_observation_traces"][0]["screenshot_path"],
         }
     ]
 
@@ -562,7 +584,8 @@ def test_log_current_step_includes_wait_observation_details() -> None:
     run_store.create_run(RunRecord(run_id=run_id, request=RunRequest(), persona=Persona(), task=Task(start_url=START_URL)))
     state = cast(Any, {
         "run_id": run_id,
-        "current_page_state": make_page_state(text="提交成功"),
+        "step_before_page_state": make_page_state(text="提交前页面"),
+        "post_action_page_state": make_page_state(text="提交成功"),
         "current_action": make_action("click", target="#submit-demo"),
         "current_execution_result": make_execution_result("click"),
         "current_validation_result": ValidationResult(

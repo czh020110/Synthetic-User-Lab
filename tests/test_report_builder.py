@@ -59,7 +59,6 @@ def make_step(
             success=execution_success,
             detail="ok" if execution_success else "failed",
             error_message=execution_error_message,
-            current_url_after_action=START_URL,
         ),
         validation_result=ValidationResult(
             status=cast(ValidationStatus, validation_status),
@@ -68,6 +67,14 @@ def make_step(
             friction_signals=friction_signals or [],
             detected_success=detected_success,
             detected_error=detected_error,
+        ),
+        post_action_page_state=ObservedPageState(
+            current_url=START_URL,
+            title="demo",
+            visible_text_summary="提交成功",
+            clickable_elements=[],
+            form_fields=[],
+            error_messages=[],
         ),
     )
 
