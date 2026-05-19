@@ -1,13 +1,13 @@
 # 项目:Synthetic User Lab
 
-项目文档：`introduction/项目文档/` (用户提供)
-目标边界：@introduction/项目实现目标/目标边界.md
-项目目标：@introduction/项目实现目标/项目目标.md
-本地环境：@introduction/环境说明/本地开发环境.md
-常用命令：@introduction/环境说明/常用命令.md
-长期计划：@introduction/TODO/STEP.md
-当前待办：@introduction/TODO/TODO.md
-项目数据流：`introduction/数据流/核心数据流.md`(按需读取)
+项目文档：`.claude_introduction/项目文档/` (用户提供)
+目标边界：@../.claude_introduction/项目实现目标/目标边界.md
+项目目标：@../.claude_introduction/项目实现目标/项目目标.md
+本地环境：@../.claude_introduction/环境说明/本地开发环境.md
+常用命令：@../.claude_introduction/环境说明/常用命令.md
+长期计划：@../.claude_introduction/TODO/STEP.md
+当前待办：@../.claude_introduction/TODO/TODO.md
+项目数据流：`.claude_introduction/数据流/核心数据流.md`(按需读取)
 
 ## 执行要求
 
@@ -22,24 +22,18 @@
 
 ## 按需读取
 
-- 需要理解调用链、状态流转、模块协作时，读取 `introduction/数据流/`。
-- `introduction/项目文档/` 是用户维护的长期项目文档，默认只读；除非用户明确要求，不要主动写入。
-
-## 进度维护
-
-- `introduction/TODO/STEP.md` 是项目长期方向和阶段步骤事实源，默认不随每次提交更新。
-- `introduction/TODO/TODO.md` 只记录可完成并验收的细粒度小模块任务。
+- 需要理解调用链、状态流转、模块协作时，读取 `.claude_introduction/数据流/`。
+- `.claude_introduction/项目文档/` 是用户维护的长期项目文档，默认只读；除非用户明确要求，不要主动写入。
 
 ## 文档组织
 
-- 项目说明必须按 `introduction/` 下的主题文件夹维护。
+- 项目说明必须按 `.claude_introduction/` 下的主题文件夹维护。
 - 单个主题文档过长时，在同一文件夹下新增分块文件。
 
 # TODO
 
-项目整体计划步骤: @introduction/TODO/STEP.md
-
-项目持续任务板: @introduction/TODO/TODO.md
+项目长期方向和阶段步骤事实源，默认不随每次提交更新: @../.claude_introduction/TODO/STEP.md
+记录可完成并验收的细粒度小模块任务板: @../.claude_introduction/TODO/TODO.md
 
 # Git 提交说明
 
@@ -54,29 +48,29 @@
 ## 分块文档说明
 
 1. 项目定位、边界与设计原则
-   @introduction/项目文档/01-项目定位边界与设计原则.md
+   @../.claude_introduction/项目文档/01-项目定位边界与设计原则.md
    - 用于理解项目为什么存在、解决什么问题、第一阶段边界与核心设计原则。
 
 2. 功能模块与 API 接口
-   @introduction/项目文档/02-功能模块与API接口.md
+   @../.claude_introduction/项目文档/02-功能模块与API接口.md
    - 用于实现 persona、task、observer、planner、validator、report 等功能模块和基础 API。
 
 3. RAG 记忆与上下文系统
-   @introduction/项目文档/03-RAG记忆与上下文系统.md
+   @../.claude_introduction/项目文档/03-RAG记忆与上下文系统.md
    - 用于实现产品知识库、UI 经验库、失败恢复库、评测规则库和检索策略。
 
 4. 系统架构、技术栈与存储职责
-   @introduction/项目文档/04-系统架构技术栈与存储职责.md
+   @../.claude_introduction/项目文档/04-系统架构技术栈与存储职责.md
    - 用于搭建项目目录、技术栈选型、服务分层以及 PostgreSQL / Redis 职责划分。
 
 5. LangGraph 执行流程与数据模型
-   @introduction/项目文档/05-LangGraph流程与数据模型.md
+   @../.claude_introduction/项目文档/05-LangGraph流程与数据模型.md
    - 用于实现 run 流程、异常恢复分支以及 Project / Persona / Task / Run / StepLog 等数据对象。
 
 6. 安全边界与 MVP 路线图
-   @introduction/项目文档/06-安全边界与MVP路线图.md
+   @../.claude_introduction/项目文档/06-安全边界与MVP路线图.md
    - 用于判断 MVP 先做什么、哪些操作必须限制，以及后续阶段如何演进。
 
 ## 技术接口规范
 
-LangChain 与 LangGraph 接口规范: @introduction/LangChain与LangGraph接口规范.md
+LangChain 与 LangGraph 接口规范: @../.claude_introduction/LangChain与LangGraph接口规范.md

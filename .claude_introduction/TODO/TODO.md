@@ -36,6 +36,13 @@
 
 ## 最近完成
 
+- [x] T-018（P0）：迁移 introduction 到根目录 .claude_introduction
+  - 来源 STEP：无
+  - 依赖：无
+  - 验收标准：`.claude/introduction` 完成迁移为根目录 `.claude_introduction`，且 `.claude` 内相关引用全部更新并可检索到新路径
+  - 完成日期：2026-05-19
+  - 验证方式：python .claude/skills/update-todo/scripts/todo_cli.py prune-recent --keep 12 --dry-run --json && python .claude/skills/query-project/scripts/query_introduction_rag.py --sync-config-status && python .claude/skills/query-project/scripts/query_introduction_rag.py --query "当前待办是什么" --top-k 2 --format markdown --no-rerank && git status --short
+
 - [x] T-001：搭建最小 Demo Run 闭环主流程并提供基础收尾能力
   - 来源 STEP：S-001
   - 验收标准：可通过 FastAPI 启动固定 demo run，并查询 status、steps、report，且 LangGraph 能完成 observe → decide → execute → validate → log → finalize 的闭环。
