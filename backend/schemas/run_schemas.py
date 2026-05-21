@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 ActionName = Literal["navigate", "click", "fill", "wait"]
 WaitObservationStatus = Literal["success", "actionable", "normal_timeout", "abnormal_stuck"]
@@ -154,6 +154,16 @@ class StepLog(BaseModel):
     wait_observation_terminal_decision: WaitObservationDecisionName | None = None  # 等待观察节点终止时的模型判断
     wait_observation_traces: list[dict[str, Any]] = Field(default_factory=list)  # 每次等待观察模型判断记录
 
+    @computed_field
+    @property
+    def before_page_state(self) -> ObservedPageState:
+        return self.observed_page_state
+
+    @computed_field
+    @property
+    def after_page_state(self) -> ObservedPageState:
+        return self.post_action_page_state
+
 
 class RunReport(BaseModel):
     """描述最终 run 报告。"""
@@ -169,6 +179,7 @@ class RunReport(BaseModel):
     friction_signals: list[str] = Field(default_factory=list)  # run 中的摩擦信号列表
     key_findings: list[str] = Field(default_factory=list)  # run 的关键发现
     next_recommendations: list[str] = Field(default_factory=list)  # 本次run 的后续建议
+    step_details: list[dict[str, Any]] = Field(default_factory=list)  # 报告中的结构化步骤明细
     error_type: RunErrorType | None = None  # run 失败时的错误类型
     error_message: str | None = None  # run 失败时的原始错误信息
 

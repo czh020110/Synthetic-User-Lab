@@ -471,13 +471,29 @@ def test_wait_after_action_records_wait_observation(monkeypatch) -> None:
     ]
 
 
-def test_route_after_validate_enters_wait_on_stuck_page() -> None:
+def test_route_after_validate_enters_wait_on_recovery_candidate() -> None:
     state = cast(Any, {
         "current_validation_result": ValidationResult(
             status="running",
             should_stop=False,
             progress_summary="继续观察",
             friction_signals=["stuck_page", "recovery_candidate"],
+        ),
+        "should_stop": False,
+        "wait_observation_status": None,
+    })
+
+    assert run_graph.route_after_validate(state) == "wait_after_action"
+
+
+@pytest.mark.parametrize("friction_signal", ["repeated_wait", "repeated_action_target", "off_track_navigation"])
+def test_route_after_validate_enters_wait_for_other_recovery_candidates(friction_signal: str) -> None:
+    state = cast(Any, {
+        "current_validation_result": ValidationResult(
+            status="running",
+            should_stop=False,
+            progress_summary="继续观察",
+            friction_signals=[friction_signal, "recovery_candidate"],
         ),
         "should_stop": False,
         "wait_observation_status": None,
@@ -567,6 +583,33 @@ def test_validate_current_progress_handles_abnormal_stuck_timeout() -> None:
     result = asyncio.run(run_graph.validate_current_progress(state))
 
     validation = result["current_validation_result"]
+    assert validation.status == "running"
+    assert validation.should_stop is False
+    assert "wait_observe_abnormal_stuck" in validation.friction_signals
+    assert "recovery_candidate" in validation.friction_signals
+    assert result["should_stop"] is False
+
+
+def test_validate_current_progress_stops_after_recovery_abnormal_stuck() -> None:
+    state = cast(Any, {
+        "run_id": "run-abnormal-stuck-after-recovery",
+        "session": {"page": object()},
+        "task": Task(start_url=START_URL),
+        "persona": Persona(),
+        "step_logs": [],
+        "current_step_index": 1,
+        "current_page_state": make_page_state(text="空白页面"),
+        "current_action": make_action("wait", target=None, value=1000),
+        "current_execution_result": make_execution_result("wait"),
+        "wait_observation_status": "abnormal_stuck",
+        "wait_observation_reason": "恢复后仍卡住。",
+        "recovery_attempted": True,
+        "validate_agent": FailIfCalledValidateAgent(),
+    })
+
+    result = asyncio.run(run_graph.validate_current_progress(state))
+
+    validation = result["current_validation_result"]
     assert validation.status == "failed"
     assert validation.should_stop is True
     assert "wait_observe_abnormal_stuck" in validation.friction_signals
@@ -576,6 +619,37 @@ def test_validate_current_progress_handles_abnormal_stuck_timeout() -> None:
 def test_route_after_log_uses_should_stop() -> None:
     assert run_graph.route_after_log(cast(Any, {"should_stop": False})) == "observe_page"
     assert run_graph.route_after_log(cast(Any, {"should_stop": True})) == "finalize_report"
+
+
+def test_route_after_log_prepares_recovery_after_abnormal_stuck() -> None:
+    state = cast(Any, {
+        "should_stop": False,
+        "wait_observation_status": "abnormal_stuck",
+        "current_validation_result": ValidationResult(
+            status="running",
+            should_stop=False,
+            progress_summary="准备恢复",
+            friction_signals=["wait_observe_abnormal_stuck", "recovery_candidate"],
+        ),
+    })
+
+    assert run_graph.route_after_log(state) == "prepare_recovery_action"
+
+
+def test_prepare_recovery_action_builds_controlled_navigate() -> None:
+    state = cast(Any, {
+        "task": Task(start_url=START_URL),
+        "current_page_state": make_page_state(text="空白页面"),
+    })
+
+    result = asyncio.run(run_graph.prepare_recovery_action(state))
+
+    assert result["current_action"].action == "navigate"
+    assert result["current_action"].target == START_URL
+    assert result["current_page_state"].visible_text_summary == "空白页面"
+    assert result["recovery_attempted"] is True
+    assert result["wait_observation_status"] is None
+    assert result["wait_observation_traces"] is None
 
 
 def test_log_current_step_includes_wait_observation_details() -> None:

@@ -2,6 +2,9 @@
 
 ## 维护规则
 
+
+
+
 - 本文件是细粒度任务的唯一事实源，不再区分独立的 TODO / DONE 文件。
 - 新任务应在准备开始实现前写入，而不是提交后再补。
 - 如果当前已经存在 `未开始` / `进行中` / `阻塞` / `暂缓` 任务，不要覆盖它们；只有在确有新想法或新增需求时才直接追加新任务。
@@ -10,21 +13,16 @@
 - 任务状态只允许：`未开始` / `进行中` / `阻塞` / `暂缓` / `完成`。
 - `最近完成` 只保留近期完成项；过久记录可按需裁剪，避免文档膨胀。
 
+
+
+
 ## 进行中
 
 无
 
 ## 未开始
 
-- [ ] T-016（P0）：在 `backend/graph/run_graph.py` 中把 `ready_for_next_action` 与 `abnormal_stuck` 结果接成真正的受控恢复动作，并区分恢复后继续主链路与终止收尾。
-  - 来源 STEP：无
-  - 依赖：无
-  - 验收标准：一次 recovery step 会留下独立的动作前后页面快照、恢复动作执行结果与最终验证结论；`abnormal_stuck` 不再只直接收尾失败。
-
-- [ ] T-017（P0）：为受控恢复动作补齐 `tests/test_demo_run_api.py` 与必要回归，确认 `/steps` 与 `/report` 在恢复分支中稳定透出 `before_page_state`、`after_page_state`、`wait_observation_traces[].screenshot_path`。
-  - 来源 STEP：无
-  - 依赖：T-016
-  - 验收标准：本次提交内可验证完成。
+无
 
 ## 阻塞
 
@@ -35,6 +33,20 @@
 无
 
 ## 最近完成
+
+- [x] T-017（P0）：为受控恢复动作补齐 `tests/test_demo_run_api.py` 与必要回归，确认 `/steps` 与 `/report` 在恢复分支中稳定透出 `before_page_state`、`after_page_state`、`wait_observation_traces[].screenshot_path`。
+  - 来源 STEP：无
+  - 依赖：T-016
+  - 验收标准：本次提交内可验证完成。
+  - 完成日期：2026-05-20
+  - 验证方式：已补充 tests/test_demo_run_api.py 恢复分支字段回归；python -m py_compile backend/graph/run_graph.py backend/graph/run_state.py backend/schemas/run_schemas.py backend/analysis/report_builder.py tests/test_validator.py tests/test_demo_run_api.py 通过；python -m pytest tests/test_report_builder.py、python -m pytest tests/test_validator.py、python -m pytest tests/test_demo_run_api.py 全部通过
+
+- [x] T-016（P0）：在 `backend/graph/run_graph.py` 中把 `ready_for_next_action` 与 `abnormal_stuck` 结果接成真正的受控恢复动作，并区分恢复后继续主链路与终止收尾。
+  - 来源 STEP：无
+  - 依赖：无
+  - 验收标准：一次 recovery step 会留下独立的动作前后页面快照、恢复动作执行结果与最终验证结论；`abnormal_stuck` 不再只直接收尾失败。
+  - 完成日期：2026-05-20
+  - 验证方式：python -m py_compile backend/graph/run_graph.py backend/graph/run_state.py backend/schemas/run_schemas.py backend/analysis/report_builder.py tests/test_validator.py tests/test_demo_run_api.py 通过；python -m pytest tests/test_report_builder.py、python -m pytest tests/test_validator.py、python -m pytest tests/test_demo_run_api.py 全部通过
 
 - [x] T-018（P0）：迁移 introduction 到根目录 .claude_introduction
   - 来源 STEP：无
@@ -105,10 +117,3 @@
   - 完成日期：2026-05-10
   - 验证方式：`tests/test_report_builder.py`、`tests/test_validator.py`、`tests/test_demo_run_api.py`
   - 关联 Commit：收敛运行报告结论并细化问题报告
-
-- [x] T-010：统一迁移提示词到 backend-prompt
-  - 来源 STEP：无
-  - 验收标准：graph 与 report 提示词统一迁移到 `backend/prompt/`，相关测试通过。
-  - 完成日期：2026-05-10
-  - 验证方式：`python -m pytest tests/test_report_builder.py tests/test_validator.py`、`python -m pytest tests/test_demo_run_api.py`
-  - 关联 Commit：统一迁移提示词到 backend-prompt

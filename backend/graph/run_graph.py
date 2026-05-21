@@ -396,7 +396,7 @@ def route_after_validate(state: RunState) -> str:
         return "log_step"
 
     signals = set(validation.friction_signals)
-    if "stuck_page" in signals and "recovery_candidate" in signals:
+    if "recovery_candidate" in signals:
         return "wait_after_action"
     return "log_step"
 
@@ -417,6 +417,16 @@ def _build_wait_success_validation(reason: str) -> ValidationResult:
         should_stop=True,
         progress_summary=reason,
         detected_success=True,
+    )
+
+
+def _build_wait_recovery_validation(reason: str) -> ValidationResult:
+    return ValidationResult(
+        status="running",
+        should_stop=False,
+        progress_summary=reason,
+        friction_signals=["wait_observe_abnormal_stuck", "recovery_candidate"],
+        detected_error=False,
     )
 
 
@@ -448,9 +458,13 @@ async def validate_current_progress(state: RunState) -> dict:
             state.get("wait_observation_reason") or "页面正常等待超过上限，仍未进入下一步或完成状态。",
             "wait_observe_normal_timeout",
         )
+    elif wait_status == "abnormal_stuck" and not state.get("recovery_attempted", False):
+        validation = _build_wait_recovery_validation(
+            state.get("wait_observation_reason") or "页面疑似异常卡住，准备执行受控恢复动作。"
+        )
     elif wait_status == "abnormal_stuck":
         validation = _build_wait_failure_validation(
-            state.get("wait_observation_reason") or "页面疑似异常卡住，短时间等待后仍无恢复。",
+            state.get("wait_observation_reason") or "页面疑似异常卡住，恢复后仍无进展。",
             "wait_observe_abnormal_stuck",
         )
     elif wait_status == "success":
@@ -536,11 +550,44 @@ def log_current_step(state: RunState) -> dict:
     run_store.add_step(state["run_id"], step_log)
     return {"step_logs": updated_steps, "current_step_index": step_index}
 
-
+# 路由节点路由函数, 条件边
 def route_after_log(state: RunState) -> str:
-    """根据当前结果决定继续还是结束。"""
+    """根据当前结果决定继续、恢复还是结束。"""
 
-    return "finalize_report" if state.get("should_stop", False) else "observe_page"
+    if state.get("should_stop", False):
+        return "finalize_report"
+    validation = state.get("current_validation_result")
+    signals = set(validation.friction_signals) if validation is not None else set()
+    if state.get("wait_observation_status") == "abnormal_stuck" and "recovery_candidate" in signals:
+        return "prepare_recovery_action"  # 对于abnormal_stuck即非正常的等待且有恢复信号的
+    return "observe_page"
+
+# 更新graph state 确定恢复动作,交给execute_action节点执行
+async def prepare_recovery_action(state: RunState) -> dict:
+    """构造最小受控恢复动作。"""
+
+    task = state.get("task")
+    page_state = state.get("current_page_state")  # 当前页面快照,暂存恢复前状态
+    if task is None or page_state is None:
+        raise ValueError("Task or page state is missing before recovery action.")
+
+    return {
+        "current_action": ActionInput(
+            action="navigate",
+            target=task.start_url,
+            reason="页面卡住或偏离后，回到任务起始页重新进入主流程。",
+        ),
+        "current_page_state": page_state,
+        "recovery_attempted": True,
+        # 清空残留状态
+        "wait_observation_status": None,
+        "wait_observation_reason": None,
+        "wait_observation_observations": None,
+        "wait_observation_elapsed_ms": None,
+        "wait_observation_timeout_ms": None,
+        "wait_observation_terminal_decision": None,
+        "wait_observation_traces": None,
+    }
 
 
 async def finalize_report(state: RunState) -> dict:
@@ -574,6 +621,7 @@ def build_run_graph(load_context_node: Any):
     workflow.add_node("wait_after_action", wait_after_action)
     workflow.add_node("validate_progress", validate_current_progress)
     workflow.add_node("log_step", log_current_step)
+    workflow.add_node("prepare_recovery_action", prepare_recovery_action)
     workflow.add_node("finalize_report", finalize_report)
 
     workflow.add_edge(START, "load_context")
@@ -596,8 +644,13 @@ def build_run_graph(load_context_node: Any):
     workflow.add_conditional_edges(
         "log_step",
         route_after_log,
-        {"finalize_report": "finalize_report", "observe_page": "observe_page"},
+        {
+            "finalize_report": "finalize_report",
+            "prepare_recovery_action": "prepare_recovery_action",
+            "observe_page": "observe_page",
+        },
     )
+    workflow.add_edge("prepare_recovery_action", "execute_action")
     workflow.add_edge("finalize_report", END)
     return workflow.compile()
 

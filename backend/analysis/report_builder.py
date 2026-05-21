@@ -62,6 +62,7 @@ def build_run_report(record: RunRecord, steps: list[StepLog]) -> RunReport:
         friction_signals=friction_signals,
         key_findings=final_key_findings,
         next_recommendations=recommendations,
+        step_details=[_serialize_step(step) for step in steps],
         error_type=record.error_type,
         error_message=record.error_message,
     )

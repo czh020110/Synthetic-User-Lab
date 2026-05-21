@@ -54,6 +54,7 @@ class RunState(TypedDict):
     wait_observation_terminal_decision: NotRequired[WaitObservationDecisionName | None]
     wait_observation_traces: NotRequired[list[dict[str, Any]] | None]
     wait_observation_round: NotRequired[int | None]
+    recovery_attempted: NotRequired[bool]
     wait_agent: NotRequired[Any]
     decide_agent: NotRequired[Any]
     validate_agent: NotRequired[Any]
