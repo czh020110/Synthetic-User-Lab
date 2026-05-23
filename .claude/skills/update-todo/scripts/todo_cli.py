@@ -141,7 +141,8 @@ def parse_board(path: Path) -> Board:
             index += 1
             continue
         if current_section == RULES_SECTION:
-            rules_lines.append(line)
+            if line.strip():
+                rules_lines.append(line)
             index += 1
             continue
         if current_section not in sections:
@@ -263,13 +264,6 @@ def render_board(board: Board) -> str:
     lines = list(board.header_lines)
     if lines and lines[-1] != "":
         lines.append("")
-    lines.append(f"## {RULES_SECTION}")
-    lines.append("")
-    if board.rules_lines:
-        lines.extend(board.rules_lines)
-    else:
-        lines.append("无")
-    lines.append("")
     for section in TASK_SECTIONS:
         lines.append(f"## {section}")
         lines.append("")
