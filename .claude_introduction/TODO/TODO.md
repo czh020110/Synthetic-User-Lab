@@ -1,21 +1,5 @@
 # TASK BOARD
 
-## 维护规则
-
-
-
-
-- 本文件是细粒度任务的唯一事实源，不再区分独立的 TODO / DONE 文件。
-- 新任务应在准备开始实现前写入，而不是提交后再补。
-- 如果当前已经存在 `未开始` / `进行中` / `阻塞` / `暂缓` 任务，不要覆盖它们；只有在确有新想法或新增需求时才直接追加新任务。
-- 只有在当前没有未完成任务时，才写入下一批主任务。
-- `T-xxx` 编号一旦分配后不重排、不复用；新增任务从当前最大编号继续递增。
-- 任务状态只允许：`未开始` / `进行中` / `阻塞` / `暂缓` / `完成`。
-- `最近完成` 只保留近期完成项；过久记录可按需裁剪，避免文档膨胀。
-
-
-
-
 ## 进行中
 
 无
@@ -33,6 +17,13 @@
 无
 
 ## 最近完成
+
+- [x] T-019（P0）：实现验证与停止条件基础判定
+  - 来源 STEP：实现验证与停止条件：根据 success_criteria、进展信号、错误次数、重复动作、最大步数判断成功、失败、卡住、偏航或需要恢复。
+  - 依赖：T-016
+  - 验收标准：run 图可基于最大步数、连续错误/无进展与重复动作给出 success/failed/stuck/recovery 决策，且有对应测试可稳定通过
+  - 完成日期：2026-05-21
+  - 验证方式：python -m py_compile backend/graph/run_graph.py backend/prompt/graph.py tests/test_validator.py && python -m pytest tests/test_validator.py -q
 
 - [x] T-017（P0）：为受控恢复动作补齐 `tests/test_demo_run_api.py` 与必要回归，确认 `/steps` 与 `/report` 在恢复分支中稳定透出 `before_page_state`、`after_page_state`、`wait_observation_traces[].screenshot_path`。
   - 来源 STEP：无
@@ -110,10 +101,3 @@
   - 完成日期：2026-05-09
   - 验证方式：文档人工检查、修改记录引用搜索
   - 关联 Commit：重构修改记录文档并移除目录索引
-
-- [x] T-009：收敛运行报告结论并细化问题报告
-  - 来源 STEP：无
-  - 验收标准：`RunReport.conclusion` 固定为 `keep / optimize / fix`，并稳定输出真实问题报告。
-  - 完成日期：2026-05-10
-  - 验证方式：`tests/test_report_builder.py`、`tests/test_validator.py`、`tests/test_demo_run_api.py`
-  - 关联 Commit：收敛运行报告结论并细化问题报告

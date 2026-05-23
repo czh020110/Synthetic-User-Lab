@@ -115,6 +115,9 @@ current_step_index:
 max_steps:
 {max_steps}
 
+success_criteria:
+{success_criteria}
+
 请只输出本步骤的验证结论。
 """.strip()
 

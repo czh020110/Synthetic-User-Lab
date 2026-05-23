@@ -478,6 +478,7 @@ async def validate_current_progress(state: RunState) -> dict:
             recent_steps=[step.model_dump(mode="json") for step in step_logs[-3:]],
             current_step_index=current_step_index,
             max_steps=task.max_steps,
+            success_criteria=task.success_criteria,
         )
         validate_agent = state.get("validate_agent")
         if validate_agent is None:

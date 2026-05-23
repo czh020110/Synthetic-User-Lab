@@ -350,6 +350,121 @@ def test_validate_progress_agent_success_drives_completion() -> None:
     assert result.progress_summary == "agent thinks done"
 
 
+def test_validate_progress_fill_does_not_mark_stuck_page() -> None:
+    task = Task(start_url=START_URL)
+    previous_steps = [
+        make_step(1, text="姓名表单", action="fill", target="#name"),
+        make_step(2, text="姓名表单", action="fill", target="#email"),
+    ]
+    page_state = make_page_state(text="姓名表单")
+    execution_result = make_execution_result("fill")
+
+    result = validate_progress(
+        task,
+        page_state,
+        execution_result,
+        previous_steps,
+        3,
+        current_action=make_action("fill", target="#comment", value="继续填写"),
+    )
+
+    assert result.status == "running"
+    assert result.should_stop is False
+    assert "stuck_page" not in result.friction_signals
+    assert "recovery_candidate" not in result.friction_signals
+
+
+def test_validate_progress_soft_failed_agent_validation_keeps_running() -> None:
+    task = Task(start_url=START_URL)
+    page_state = make_page_state(text="仍可继续")
+    execution_result = make_execution_result("click")
+    agent_validation = ValidationResult(
+        status="failed",
+        should_stop=True,
+        progress_summary="模型怀疑失败，但未确认。",
+        friction_signals=["possible_issue"],
+        detected_error=False,
+    )
+
+    result = validate_progress(
+        task,
+        page_state,
+        execution_result,
+        [],
+        1,
+        current_action=make_action("click", target="#submit-demo"),
+        agent_validation=agent_validation,
+    )
+
+    assert result.status == "running"
+    assert result.should_stop is False
+    assert result.progress_summary == "尚未出现可确认的失败条件，继续观察后续步骤。"
+    assert "possible_issue" in result.friction_signals
+
+
+@pytest.mark.parametrize(
+    ("name", "previous_steps", "page_state", "current_action", "unexpected_signal"),
+    [
+        (
+            "wait reset after click",
+            [
+                make_step(1, text="处理中 1", action="wait", target="body"),
+                make_step(2, text="处理中 2", action="wait", target="body"),
+                make_step(3, text="点击后页面", action="click", target="#submit-demo"),
+            ],
+            make_page_state(text="点击后继续等待"),
+            make_action("wait", target="body"),
+            "repeated_wait",
+        ),
+        (
+            "action target reset after target change",
+            [
+                make_step(1, text="入口 A-1", action="click", target="#entry-a"),
+                make_step(2, text="入口 A-2", action="click", target="#entry-a"),
+                make_step(3, text="入口 B", action="click", target="#entry-b"),
+            ],
+            make_page_state(text="再次看到入口 A"),
+            make_action("click", target="#entry-a"),
+            "repeated_action_target",
+        ),
+        (
+            "off track reset after returning start url",
+            [
+                make_step(1, url=OTHER_URL, text="陌生页面 1", action="navigate", target=OTHER_URL),
+                make_step(2, url=OTHER_URL, text="陌生页面 2", action="wait", target="body"),
+                make_step(3, url=START_URL, text="回到起点", action="navigate", target=START_URL),
+            ],
+            make_page_state(url=START_URL, text="回到起点后等待"),
+            make_action("wait", target="body"),
+            "off_track_navigation",
+        ),
+    ],
+)
+def test_validate_progress_streaks_reset_after_intervening_steps(
+    name: str,
+    previous_steps: list[StepLog],
+    page_state: ObservedPageState,
+    current_action: ActionInput,
+    unexpected_signal: str,
+) -> None:
+    del name
+    task = Task(start_url=START_URL)
+    execution_result = make_execution_result(current_action.action)
+
+    result = validate_progress(
+        task,
+        page_state,
+        execution_result,
+        previous_steps,
+        len(previous_steps) + 1,
+        current_action=current_action,
+    )
+
+    assert result.status == "running"
+    assert result.should_stop is False
+    assert unexpected_signal not in result.friction_signals
+
+
 class FakeValidateAgent:
     async def ainvoke(self, *_args, **_kwargs):
         return {
@@ -358,6 +473,21 @@ class FakeValidateAgent:
                 should_stop=True,
                 progress_summary="agent thinks done",
                 detected_success=True,
+            ).model_dump()
+        }
+
+
+class RecordingValidateAgent:
+    def __init__(self) -> None:
+        self.calls: list[list[Any]] = []
+
+    async def ainvoke(self, payload, **_kwargs):
+        self.calls.append(payload["messages"])
+        return {
+            "structured_response": ValidationResult(
+                status="running",
+                should_stop=False,
+                progress_summary="继续观察",
             ).model_dump()
         }
 
@@ -391,6 +521,32 @@ def test_validate_current_progress_applies_guardrails(monkeypatch) -> None:
     assert result["current_validation_result"].status == "succeeded"
     assert result["current_validation_result"].should_stop is True
     assert result["should_stop"] is True
+
+
+def test_validate_current_progress_passes_success_criteria_to_validate_agent() -> None:
+    validate_agent = RecordingValidateAgent()
+    state = cast(Any, {
+        "run_id": "run-success-criteria",
+        "session": {"page": object()},
+        "task": Task(start_url=START_URL, success_criteria=["页面出现提交成功", "结果页出现摘要卡片"]),
+        "persona": Persona(),
+        "step_logs": [],
+        "current_step_index": 0,
+        "current_page_state": make_page_state(text="结果页已出现摘要卡片"),
+        "current_action": make_action("click", target="#submit-demo"),
+        "current_execution_result": make_execution_result("click"),
+        "validate_agent": validate_agent,
+    })
+
+    result = asyncio.run(run_graph.validate_current_progress(state))
+
+    assert result["current_validation_result"].status == "running"
+    assert result["should_stop"] is False
+    assert validate_agent.calls
+    message = validate_agent.calls[0][0]
+    assert "success_criteria:" in message.content
+    assert "页面出现提交成功" in message.content
+    assert "结果页出现摘要卡片" in message.content
 
 
 def test_wait_after_action_records_wait_observation(monkeypatch) -> None:
