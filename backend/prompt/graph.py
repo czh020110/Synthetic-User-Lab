@@ -53,6 +53,9 @@ form_field_values:
 history_summary:
 {history_summary}
 
+retrieval_context:
+{retrieval_context}
+
 recent_steps:
 {recent_steps}
 
@@ -105,6 +108,9 @@ execution_result:
 
 history_summary:
 {history_summary}
+
+retrieval_context:
+{retrieval_context}
 
 current_action:
 {current_action}

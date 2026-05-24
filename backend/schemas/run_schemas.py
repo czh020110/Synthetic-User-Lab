@@ -19,6 +19,7 @@ RunStatus = Literal["queued", "running", "succeeded", "failed"]
 RunErrorType = Literal["model_error", "system_error"]
 ValidationStatus = Literal["running", "succeeded", "failed"]
 ReportConclusion = Literal["keep", "optimize", "fix"]
+RetrievalSourceType = Literal["product_knowledge", "failure_case"]
 
 
 def utc_now() -> datetime:
@@ -59,6 +60,15 @@ class Task(BaseModel):
     allowed_actions: list[ActionName] = Field(default_factory=lambda: ["navigate", "click", "fill", "wait"])
     risk_level: str = "low"
     destructive_action_allowed: bool = False  # 是否允许执行"破坏性动作":删除/提交/发布/支付等
+
+
+class RetrievedContextItem(BaseModel):
+    """描述检索到的上下文片段。"""
+
+    source_type: RetrievalSourceType
+    title: str
+    content: str
+    source_ref: str = ""
 
 
 class RunRequest(BaseModel):
@@ -155,6 +165,7 @@ class StepLog(BaseModel):
     wait_observation_timeout_ms: int | None = None  # 等待观察节点本次使用的超时上限
     wait_observation_terminal_decision: WaitObservationDecisionName | None = None  # 等待观察节点终止时的模型判断
     wait_observation_traces: list[dict[str, Any]] = Field(default_factory=list)  # 每次等待观察模型判断记录
+    retrieval_context: list[RetrievedContextItem] = Field(default_factory=list)  # 检索到的上下文片段
 
     @computed_field
     @property

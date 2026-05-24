@@ -16,6 +16,7 @@ from backend.schemas.run_schemas import (
     ExecutionResult,
     ObservedPageState,
     Persona,
+    RetrievedContextItem,
     RunRecord,
     RunRequest,
     RunReport,
@@ -54,6 +55,7 @@ class RunState(TypedDict):
     wait_observation_terminal_decision: NotRequired[WaitObservationDecisionName | None]
     wait_observation_traces: NotRequired[list[dict[str, Any]] | None]
     wait_observation_round: NotRequired[int | None]
+    retrieval_context: NotRequired[list[RetrievedContextItem]]
     recovery_attempted: NotRequired[bool]
     wait_agent: NotRequired[Any]
     decide_agent: NotRequired[Any]

@@ -15,6 +15,7 @@ from backend.schemas.run_schemas import (
     ExecutionResult,
     ObservedPageState,
     Persona,
+    RetrievedContextItem,
     RunRecord,
     RunRequest,
     StepLog,
@@ -575,6 +576,37 @@ def test_validate_current_progress_passes_success_criteria_to_validate_agent() -
     assert "结果页出现摘要卡片" in message.content
 
 
+def test_validate_current_progress_passes_retrieval_context_to_validate_agent() -> None:
+    validate_agent = RecordingValidateAgent()
+    state = cast(Any, {
+        "run_id": "run-validate-retrieval",
+        "session": {"page": object()},
+        "task": Task(start_url=START_URL, success_criteria=["页面出现提交成功"]),
+        "persona": Persona(),
+        "step_logs": [],
+        "current_step_index": 0,
+        "current_page_state": make_page_state(text="页面正在处理中"),
+        "current_action": make_action("click", target="#submit-demo"),
+        "current_execution_result": make_execution_result("click"),
+        "validate_agent": validate_agent,
+        "retrieval_context": [
+            RetrievedContextItem(
+                source_type="product_knowledge",
+                title="正常等待提示",
+                content="当页面显示正在处理、请稍候或加载中时，优先等待后端处理结束，再继续下一步。",
+                source_ref="seed:product_knowledge:waiting_state",
+            )
+        ],
+    })
+
+    asyncio.run(run_graph.validate_current_progress(state))
+
+    message = validate_agent.calls[0][0]
+    assert "retrieval_context:" in message.content
+    assert "正常等待提示" in message.content
+    assert "优先等待后端处理结束" in message.content
+
+
 def test_wait_after_action_records_wait_observation(monkeypatch) -> None:
     page_state = make_page_state(text="提交成功")
 
@@ -941,6 +973,14 @@ def test_decide_next_action_retries_bad_format_with_format_prompt() -> None:
         "persona": Persona(),
         "task": Task(start_url=START_URL),
         "step_logs": [],
+        "retrieval_context": [
+            RetrievedContextItem(
+                source_type="failure_case",
+                title="重复点击无进展",
+                content="同一按钮重复点击多次仍没有变化时，不要继续重复操作，转向受控恢复路径。",
+                source_ref="seed:failure_case:repeated_click",
+            )
+        ],
         "decide_agent": decide_agent,
     })
 
@@ -949,6 +989,9 @@ def test_decide_next_action_retries_bad_format_with_format_prompt() -> None:
     assert result["current_action"].action == "click"
     assert len(decide_agent.messages_by_call) == 2
     assert len(decide_agent.messages_by_call[1]) == len(decide_agent.messages_by_call[0]) + 1
+    assert "retrieval_context:" in decide_agent.messages_by_call[0][0].content
+    assert "重复点击无进展" in decide_agent.messages_by_call[0][0].content
+    assert "转向受控恢复路径" in decide_agent.messages_by_call[0][0].content
     assert "上一次回复未能通过结构化格式校验" in decide_agent.messages_by_call[1][-1].content
     assert "JSON Schema" in decide_agent.messages_by_call[1][-1].content
 

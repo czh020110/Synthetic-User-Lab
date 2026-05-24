@@ -24,6 +24,8 @@ from backend.analysis.validator import validate_progress
 from backend.core.config import get_settings
 from backend.execution.observer import observe_page
 from backend.execution.playwright_adapter import close_browser_session, create_browser_session, execute_action
+from backend.graph.run_state import RunState
+from backend.graph.wait_observer import WaitObservationDecision, WaitObservationOptions, observe_until_ready
 from backend.prompt.graph import (
     decide,
     decide_input,
@@ -33,8 +35,7 @@ from backend.prompt.graph import (
     wait_observe,
     wait_observe_input,
 )
-from backend.graph.run_state import RunState
-from backend.graph.wait_observer import WaitObservationDecision, WaitObservationOptions, observe_until_ready
+from backend.retrieval.minimal_context import render_retrieval_context
 from backend.schemas.run_schemas import ActionInput, Persona, RunErrorType, RunRequest, StepLog, Task, ValidationResult
 from backend.stores.in_memory_run_store import run_store
 
@@ -245,11 +246,13 @@ async def decide_next_action(state: RunState) -> dict:
         raise ValueError("Persona or task is missing before action decision.")
 
     step_logs = state.get("step_logs", [])
+    retrieval_context_text = render_retrieval_context(state.get("retrieval_context") or [])
     agent_messages = decide_input_prompt.format_messages(
         current_page_state=page_state.model_dump_json(indent=2),
         clickable_selectors=sorted(clickable_selectors),
         form_field_values=form_field_values,
         history_summary=build_history_summary(step_logs),
+        retrieval_context=retrieval_context_text,
         recent_steps=[step.model_dump(mode="json") for step in step_logs[-3:]],
         previous_steps_count=len(step_logs),
     )
@@ -452,10 +455,9 @@ async def validate_current_progress(state: RunState) -> dict:
     if persona is None:
         raise ValueError("Persona is missing before progress validation.")
     step_logs = state.get("step_logs", [])
-
-    wait_status = state.get("wait_observation_status")
     current_action = state.get("current_action")
     action_json = current_action.model_dump_json(indent=2) if current_action is not None else "null"
+    wait_status = state.get("wait_observation_status")
     if wait_status == "normal_timeout":
         validation = _build_wait_failure_validation(
             state.get("wait_observation_reason") or "页面正常等待超过上限，仍未进入下一步或完成状态。",
@@ -473,11 +475,13 @@ async def validate_current_progress(state: RunState) -> dict:
     elif wait_status == "success":
         validation = _build_wait_success_validation(state.get("wait_observation_reason") or "等待观察确认任务已完成。")
     else:
+        retrieval_context_text = render_retrieval_context(state.get("retrieval_context") or [])
         agent_messages = validate_input_prompt.format_messages(
             latest_page_state=page_state.model_dump_json(indent=2),
             current_action=action_json,
             execution_result=execution_result.model_dump_json(indent=2),
             history_summary=build_history_summary(step_logs),
+            retrieval_context=retrieval_context_text,
             recent_steps=[step.model_dump(mode="json") for step in step_logs[-3:]],
             current_step_index=current_step_index,
             max_steps=task.max_steps,
@@ -549,6 +553,7 @@ def log_current_step(state: RunState) -> dict:
         wait_observation_timeout_ms=wait_observation_timeout_ms,
         wait_observation_terminal_decision=wait_observation_terminal_decision,
         wait_observation_traces=wait_observation_traces,
+        retrieval_context=state.get("retrieval_context") or [],
     )
     updated_steps = [*step_logs, step_log]
     run_store.add_step(state["run_id"], step_log)

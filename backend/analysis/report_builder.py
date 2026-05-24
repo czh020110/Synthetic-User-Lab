@@ -449,6 +449,7 @@ def _serialize_step(step: StepLog) -> dict[str, Any]:
         "wait_observation_timeout_ms": step.wait_observation_timeout_ms,
         "wait_observation_terminal_decision": step.wait_observation_terminal_decision,
         "wait_observation_traces": step.wait_observation_traces,
+        "retrieval_context": [item.model_dump(mode="json") for item in step.retrieval_context],
     }
 
 

@@ -12,6 +12,7 @@ from pathlib import Path
 from backend.core.config import get_settings
 from backend.graph.run_graph import create_run_agents, build_run_graph, run_workflow
 from backend.graph.run_state import RunState
+from backend.retrieval import build_retrieval_context
 from backend.schemas.run_schemas import Persona, RunRecord, RunRequest, Task
 from backend.stores.in_memory_run_store import run_store
 
@@ -75,6 +76,8 @@ async def load_demo_context(state: RunState) -> dict:
         record.persona = persona
         record.task = task
 
+    retrieval_context = build_retrieval_context(persona, task)
+
     decide_agent, validate_agent, wait_agent = create_run_agents(persona, task)
     run_store.mark_running(record.run_id)
     return {
@@ -84,6 +87,7 @@ async def load_demo_context(state: RunState) -> dict:
         "decide_agent": decide_agent,
         "validate_agent": validate_agent,
         "wait_agent": wait_agent,
+        "retrieval_context": retrieval_context,
         "step_logs": [],
         "current_step_index": 0,
         "should_stop": False,

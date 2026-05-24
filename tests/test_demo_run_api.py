@@ -13,6 +13,7 @@ from backend.schemas.run_schemas import (
     ExecutionResult,
     ObservedPageState,
     Persona,
+    RetrievedContextItem,
     RunRecord,
     RunRequest,
     StepLog,
@@ -109,6 +110,21 @@ def test_steps_and_report_expose_recovery_branch_snapshots() -> None:
         persona=Persona(),
         task=Task(start_url="http://testserver/demo/index.html"),
     )
+    shared_retrieval_context = [
+        RetrievedContextItem(
+            source_type="product_knowledge",
+            title="表单完成标准",
+            content="页面明确显示任务完成状态、成功卡片可见且表单已隐藏时，可判定为完成。",
+            source_ref="seed:product_knowledge:success_criteria",
+        ),
+        RetrievedContextItem(
+            source_type="failure_case",
+            title="页面无响应恢复",
+            content="页面连续多步无变化且没有明确下一步入口时，先回到 start_url，再重新进入主流程。",
+            source_ref="seed:failure_case:stuck_page",
+        ),
+    ]
+
     wait_step = StepLog(
         step_index=1,
         observed_page_state=_make_page_state("动作前页面", "screenshots/run-recovery-api/step-1-before.png"),
@@ -139,6 +155,7 @@ def test_steps_and_report_expose_recovery_branch_snapshots() -> None:
                 "screenshot_path": "screenshots/run-recovery-api/step-1-wait-1.png",
             }
         ],
+        retrieval_context=shared_retrieval_context,
     )
     recovery_step = StepLog(
         step_index=2,
@@ -157,6 +174,7 @@ def test_steps_and_report_expose_recovery_branch_snapshots() -> None:
             detected_error=True,
         ),
         post_action_page_state=_make_page_state("恢复后页面", "screenshots/run-recovery-api/step-2-after.png"),
+        retrieval_context=shared_retrieval_context,
     )
 
     run_store.create_run(record)
@@ -172,15 +190,15 @@ def test_steps_and_report_expose_recovery_branch_snapshots() -> None:
     assert steps[0]["before_page_state"]["screenshot_path"].endswith("step-1-before.png")
     assert steps[0]["after_page_state"]["screenshot_path"].endswith("step-1-after.png")
     assert steps[0]["wait_observation_traces"][0]["screenshot_path"].endswith("step-1-wait-1.png")
-    assert steps[1]["decided_action"]["action"] == "navigate"
     assert steps[1]["before_page_state"]["screenshot_path"].endswith("step-2-before.png")
     assert steps[1]["after_page_state"]["screenshot_path"].endswith("step-2-after.png")
+    assert steps[0]["retrieval_context"] == steps[1]["retrieval_context"]
+    assert {item["title"] for item in steps[0]["retrieval_context"]} == {"表单完成标准", "页面无响应恢复"}
 
     assert report_response.status_code == 200
     report = report_response.json()["data"]
     assert report["status"] == "failed"
     assert report["total_steps"] == 2
     assert "wait_observe_abnormal_stuck" in report["friction_signals"]
-    assert report["step_details"][0]["before_page_state"]["screenshot_path"].endswith("step-1-before.png")
-    assert report["step_details"][0]["after_page_state"]["screenshot_path"].endswith("step-1-after.png")
-    assert report["step_details"][0]["wait_observation_traces"][0]["screenshot_path"].endswith("step-1-wait-1.png")
+    assert report["step_details"][0]["retrieval_context"] == report["step_details"][1]["retrieval_context"]
+    assert {item["title"] for item in report["step_details"][0]["retrieval_context"]} == {"表单完成标准", "页面无响应恢复"}

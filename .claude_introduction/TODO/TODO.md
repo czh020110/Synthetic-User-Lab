@@ -18,6 +18,13 @@
 
 ## 最近完成
 
+- [x] T-021（P0）：实现基础 RAG 上下文层最小闭环
+  - 来源 STEP：实现基础 RAG 上下文层
+  - 依赖：无
+  - 验收标准：新增最小 retrieval 模块与测试数据源，run graph 可在决策前检索产品知识与失败案例并写入状态/步骤，相关回归测试稳定通过
+  - 完成日期：2026-05-24
+  - 验证方式：python -m py_compile backend/schemas/run_schemas.py backend/graph/run_state.py backend/prompt/graph.py backend/retrieval/__init__.py backend/retrieval/minimal_context.py backend/graph/demo_run_graph.py backend/graph/run_graph.py backend/analysis/report_builder.py tests/test_validator.py tests/test_demo_run_api.py tests/test_retrieval.py && pytest tests/test_retrieval.py tests/test_validator.py tests/test_demo_run_api.py -q && pytest tests/test_report_builder.py -q
+
 - [x] T-020（P0）：修复代码审查发现的六个关键可用性问题
   - 来源 STEP：无
   - 依赖：无
@@ -94,17 +101,3 @@
   - 完成日期：2026-04-27
   - 验证方式：文档人工检查
   - 关联 Commit：更新claude项目文档
-
-- [x] T-007：补充细粒度 TODO 与开发文档约束说明
-  - 来源 STEP：无
-  - 验收标准：文档人工检查。
-  - 完成日期：2026-04-27
-  - 验证方式：文档人工检查
-  - 关联 Commit：更新claude项目文档2
-
-- [x] T-008：按 git commit 维度重构修改记录并移除目录索引依赖
-  - 来源 STEP：无
-  - 验收标准：文档人工检查、修改记录引用搜索。
-  - 完成日期：2026-05-09
-  - 验证方式：文档人工检查、修改记录引用搜索
-  - 关联 Commit：重构修改记录文档并移除目录索引
