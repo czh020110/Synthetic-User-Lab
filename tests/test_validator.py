@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from pydantic import ValidationError
 
 from backend.analysis.validator import validate_progress
 import backend.graph.run_graph as run_graph
@@ -39,6 +40,8 @@ def make_page_state(url: str = START_URL, text: str = "提交体验表单", erro
 
 
 def make_action(action: ActionName, target: str | None = "#start-demo", value: str | int | None = None) -> ActionInput:
+    if action == "fill" and value is None:
+        value = "test value"
     return ActionInput(action=action, target=target, value=value, reason="test")
 
 
@@ -90,6 +93,11 @@ def test_action_input_allows_wait_without_target() -> None:
     assert action.value == 2000
 
 
+def test_action_input_requires_fill_value() -> None:
+    with pytest.raises(ValidationError):
+        ActionInput(action="fill", target="#name", reason="test")
+
+
 def test_route_after_execute_wait_goes_to_wait_node() -> None:
     state = cast(Any, {"current_action": make_action("wait", target=None, value=1000)})
     assert run_graph.route_after_execute(state) == "wait_after_action"
@@ -102,6 +110,24 @@ def test_route_after_execute_non_wait_goes_to_observe_after_action() -> None:
 
 def test_validate_progress_success() -> None:
     task = Task(start_url=START_URL)
+    page_state = make_page_state(text="提交成功")
+    execution_result = make_execution_result("click")
+    agent_validation = ValidationResult(
+        status="succeeded",
+        should_stop=True,
+        progress_summary="agent thinks done",
+        detected_success=True,
+    )
+
+    result = validate_progress(task, page_state, execution_result, [], 3, agent_validation=agent_validation)
+
+    assert result.status == "succeeded"
+    assert result.should_stop is True
+    assert result.detected_success is True
+
+
+def test_validate_progress_success_at_step_limit_is_not_overridden() -> None:
+    task = Task(start_url=START_URL, max_steps=3)
     page_state = make_page_state(text="提交成功")
     execution_result = make_execution_result("click")
     agent_validation = ValidationResult(

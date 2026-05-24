@@ -6,17 +6,44 @@ from __future__ import annotations
 # 模块数据流: HTTP 请求 -> 内存记录/后台执行 -> HTTP 响应
 # 模块接口说明: start/status/steps/report 四个接口覆盖最小 run 闭环查询面
 
-import asyncio  # 异步执行
+import asyncio
+import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request  # 路由、异常和请求对象
+from fastapi import APIRouter, HTTPException, Request
 
 from backend.core.config import get_settings
 from backend.graph.demo_run_graph import create_demo_placeholder_record, run_demo_workflow
 from backend.schemas.run_schemas import ApiResponse, RunRequest
 from backend.stores.in_memory_run_store import run_store
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/runs/demo", tags=["demo-runs"])
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _track_background_task(run_id: str, task: asyncio.Task) -> None:
+    """保持后台 task 强引用，并在异常/取消时自动将 run 标记为 failed。"""
+    _background_tasks.add(task)
+
+    def handle_done(done_task: asyncio.Task) -> None:
+        _background_tasks.discard(done_task)
+        status = run_store.get_status(run_id)
+        if status is not None and status.status in {"succeeded", "failed"}:
+            return
+        if done_task.cancelled():
+            run_store.fail_run(run_id, "后台任务被取消。")
+            return
+        exc = done_task.exception()
+        if exc is not None:
+            logger.error(
+                "demo run background task failed, run_id=%s",
+                run_id,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+            run_store.fail_run(run_id, f"{type(exc).__name__}: {exc}")
+
+    task.add_done_callback(handle_done)
 
 
 @router.get("/health", response_model=ApiResponse)
@@ -39,7 +66,7 @@ async def start_demo_run(request: Request, payload: RunRequest) -> ApiResponse:
         app_base_url=app_base_url,
     )
     run_store.create_run(placeholder_record)
-    asyncio.create_task(
+    task = asyncio.create_task(
         run_demo_workflow(
             run_id=run_id,
             request=payload,
@@ -47,6 +74,7 @@ async def start_demo_run(request: Request, payload: RunRequest) -> ApiResponse:
             screenshot_dir=settings.screenshot_dir,
         )
     )
+    _track_background_task(run_id, task)
     return ApiResponse(data={"run_id": run_id, "status": "queued"})
 
 

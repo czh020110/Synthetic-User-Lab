@@ -15,37 +15,50 @@ async def observe_page(page: Any) -> ObservedPageState:
     """返回当前页面的结构化观察结果。"""
 
     title = await page.title()
-    visible_text = await page.evaluate(  # 提取页面可见文本 
+    visible_text = await page.evaluate(
         r"() => (document.body?.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 600)"
     )
-    clickable_elements = await page.evaluate(  # 提取页面可点击元素
+    clickable_elements = await page.evaluate(
         """
         () => Array.from(document.querySelectorAll('button, a, [role="button"]'))
             .filter((element) => !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length))
             .slice(0, 10)
-            .map((element, index) => ({
-                text: (element.innerText || element.textContent || '').trim(),
-                selector: element.id
-                    ? `#${element.id}`
-                    : `${element.tagName.toLowerCase()}:visible-${index + 1}`,
-            }))
+            .map((element) => {
+                const tagName = element.tagName.toLowerCase();
+                const sameTagElements = Array.from(document.querySelectorAll(tagName));
+                const sameTagIndex = sameTagElements.indexOf(element) + 1;
+                return {
+                    text: (element.innerText || element.textContent || '').trim(),
+                    selector: element.id ? `#${CSS.escape(element.id)}` : `${tagName}:nth-of-type(${sameTagIndex})`,
+                };
+            })
         """
     )
-    form_fields = await page.evaluate(  # 提取表单字段
+    form_fields = await page.evaluate(
         """
         () => Array.from(document.querySelectorAll('input, textarea, select'))
             .filter((element) => !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length))
             .slice(0, 10)
-            .map((element, index) => ({
-                name: element.getAttribute('name') || element.id || `field-${index + 1}`,
-                selector: element.id
-                    ? `#${element.id}`
-                    : `[name="${element.getAttribute('name') || `field-${index + 1}`}" ]`,
-                value: element.value || '',
-            }))
+            .map((element) => {
+                const tagName = element.tagName.toLowerCase();
+                const name = element.getAttribute('name') || element.id || '';
+                const sameTagElements = Array.from(document.querySelectorAll(tagName));
+                const sameTagIndex = sameTagElements.indexOf(element) + 1;
+                let selector = `${tagName}:nth-of-type(${sameTagIndex})`;
+                if (element.id) {
+                    selector = `#${CSS.escape(element.id)}`;
+                } else if (element.getAttribute('name')) {
+                    selector = `${tagName}[name="${CSS.escape(element.getAttribute('name'))}"]`;
+                }
+                return {
+                    name: name || `field-${sameTagIndex}`,
+                    selector,
+                    value: element.value || '',
+                };
+            })
         """
     )
-    error_messages = await page.evaluate(  # 提取错误信息
+    error_messages = await page.evaluate(
         """
         () => Array.from(document.querySelectorAll('.error-message, [role="alert"], [data-error="true"]'))
             .filter((element) => !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length))
@@ -55,7 +68,7 @@ async def observe_page(page: Any) -> ObservedPageState:
         """
     )
 
-    return ObservedPageState(  # 返回观察信息
+    return ObservedPageState(
         current_url=page.url,
         title=title,
         visible_text_summary=visible_text,

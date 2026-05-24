@@ -18,6 +18,13 @@
 
 ## 最近完成
 
+- [x] T-020（P0）：修复代码审查发现的六个关键可用性问题
+  - 来源 STEP：无
+  - 依赖：无
+  - 验收标准：validator 成功判定、selector 输出、配置懒初始化、run graph 模型初始化、报告异步收尾、后台任务异常状态均完成修复并通过回归测试
+  - 完成日期：2026-05-24
+  - 验证方式：python -m py_compile backend/api/routes/demo_runs.py backend/core/config.py backend/ai_api/provider_router.py backend/analysis/report_builder.py backend/execution/observer.py backend/graph/run_graph.py backend/schemas/run_schemas.py backend/analysis/validator.py tests/test_demo_run_api.py tests/test_report_builder.py tests/test_validator.py tests/test_observer.py && python -m pytest tests/test_demo_run_api.py tests/test_report_builder.py tests/test_validator.py tests/test_observer.py -q
+
 - [x] T-019（P0）：实现验证与停止条件基础判定
   - 来源 STEP：实现验证与停止条件：根据 success_criteria、进展信号、错误次数、重复动作、最大步数判断成功、失败、卡住、偏航或需要恢复。
   - 依赖：T-016

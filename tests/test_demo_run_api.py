@@ -1,5 +1,10 @@
+from __future__ import annotations
+
+import asyncio
+
 from fastapi.testclient import TestClient
 
+import backend.api.routes.demo_runs as demo_runs
 from backend.analysis.report_builder import build_run_report
 from backend.core.config import get_settings
 from backend.main import app
@@ -22,6 +27,7 @@ api_prefix = get_settings().api_prefix
 
 def setup_function() -> None:
     run_store.clear()
+    demo_runs._background_tasks.clear()
 
 
 def test_health_check() -> None:
@@ -30,7 +36,12 @@ def test_health_check() -> None:
     assert response.json()["data"]["status"] == "ok"
 
 
-def test_start_demo_run_returns_run_id() -> None:
+def test_start_demo_run_returns_run_id(monkeypatch) -> None:
+    async def fake_run_demo_workflow(**_kwargs):
+        await asyncio.sleep(0)
+
+    monkeypatch.setattr(demo_runs, "run_demo_workflow", fake_run_demo_workflow)
+
     response = client.post(
         f"{api_prefix}/runs/demo/start",
         json={
@@ -42,6 +53,43 @@ def test_start_demo_run_returns_run_id() -> None:
     payload = response.json()["data"]
     assert "run_id" in payload
     assert payload["status"] == "queued"
+    async def wait_until_stopped() -> None:
+        while demo_runs._background_tasks:
+            await asyncio.sleep(0)
+
+    asyncio.run(wait_until_stopped())
+    status = run_store.get_status(payload["run_id"])
+    assert status is not None
+    assert status.status in {"queued", "running", "succeeded", "failed"}
+
+
+def test_background_task_failure_marks_run_failed() -> None:
+    run_id = "run-background-failed"
+    run_store.create_run(
+        RunRecord(
+            run_id=run_id,
+            request=RunRequest(run_name="demo"),
+            persona=Persona(),
+            task=Task(start_url="http://testserver/demo/index.html"),
+        )
+    )
+
+    async def fail() -> None:
+        raise RuntimeError("boom")
+
+    async def run_and_wait_done_callback() -> None:
+        task = asyncio.create_task(fail())
+        demo_runs._track_background_task(run_id, task)
+        await asyncio.gather(task, return_exceptions=True)
+        await asyncio.sleep(0)
+
+    asyncio.run(run_and_wait_done_callback())
+
+    status = run_store.get_status(run_id)
+    assert status is not None
+    assert status.status == "failed"
+    assert status.error_message == "RuntimeError: boom"
+    assert not demo_runs._background_tasks
 
 
 def _make_page_state(text: str, screenshot_path: str) -> ObservedPageState:

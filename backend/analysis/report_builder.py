@@ -27,15 +27,41 @@ CONCLUSION_SEVERITY_ORDER: dict[ReportConclusion, int] = {
 def build_run_report(record: RunRecord, steps: list[StepLog]) -> RunReport:
     """生成当前 run 的结构化报告。"""
 
+    return _build_run_report_sync(record, steps)
+
+
+async def build_run_report_async(record: RunRecord, steps: list[StepLog]) -> RunReport:
+    """生成当前 run 的结构化报告。"""
+
+    return await _build_run_report_async(record, steps)
+
+
+def build_run_report_without_llm(record: RunRecord, steps: list[StepLog]) -> RunReport:
+    """生成不依赖模型分析的兜底报告。"""
+
+    return _build_run_report_sync(record, steps, allow_detailed_report=False)
+
+
+def _build_report_base(record: RunRecord, steps: list[StepLog]) -> tuple[bool, str, list[str], ReportConclusion, list[str]]:
     success = bool(steps and steps[-1].validation_result.detected_success)
     last_progress_summary = steps[-1].validation_result.progress_summary if steps else "任务未执行任何步骤。"
     friction_signals = _collect_friction_signals(steps)
     conclusion = _build_conclusion(record, steps, success, friction_signals, last_progress_summary)
     key_findings = _build_base_key_findings(record, steps, success, conclusion, friction_signals, last_progress_summary)
+    return success, last_progress_summary, friction_signals, conclusion, key_findings
+
+
+def _build_run_report_sync(
+    record: RunRecord,
+    steps: list[StepLog],
+    *,
+    allow_detailed_report: bool = True,
+) -> RunReport:
+    success, last_progress_summary, friction_signals, conclusion, key_findings = _build_report_base(record, steps)
 
     generated_key_findings: list[str] = []
     recommendations: list[str] = []
-    if _should_generate_detailed_report(record, steps, success, friction_signals, last_progress_summary):
+    if allow_detailed_report and _should_generate_detailed_report(record, steps, success, friction_signals, last_progress_summary):
         analysis = _generate_report_analysis(
             record=record,
             steps=steps,
@@ -48,8 +74,59 @@ def build_run_report(record: RunRecord, steps: list[StepLog]) -> RunReport:
         generated_key_findings = _dedupe_text_items(analysis.get("key_findings", []))
         recommendations = _dedupe_text_items(analysis.get("next_recommendations", []), limit=RECOMMENDATION_LIMIT)
 
-    final_key_findings = _dedupe_text_items([*key_findings, *generated_key_findings])
+    return _build_report_model(
+        record=record,
+        steps=steps,
+        success=success,
+        last_progress_summary=last_progress_summary,
+        friction_signals=friction_signals,
+        conclusion=conclusion,
+        key_findings=[*key_findings, *generated_key_findings],
+        recommendations=recommendations,
+    )
 
+
+async def _build_run_report_async(record: RunRecord, steps: list[StepLog]) -> RunReport:
+    success, last_progress_summary, friction_signals, conclusion, key_findings = _build_report_base(record, steps)
+
+    generated_key_findings: list[str] = []
+    recommendations: list[str] = []
+    if _should_generate_detailed_report(record, steps, success, friction_signals, last_progress_summary):
+        analysis = await _generate_report_analysis_async(
+            record=record,
+            steps=steps,
+            success=success,
+            friction_signals=friction_signals,
+            last_progress_summary=last_progress_summary,
+            fallback_conclusion=conclusion,
+        )
+        conclusion = _merge_conclusion(conclusion, analysis.get("conclusion"))
+        generated_key_findings = _dedupe_text_items(analysis.get("key_findings", []))
+        recommendations = _dedupe_text_items(analysis.get("next_recommendations", []), limit=RECOMMENDATION_LIMIT)
+
+    return _build_report_model(
+        record=record,
+        steps=steps,
+        success=success,
+        last_progress_summary=last_progress_summary,
+        friction_signals=friction_signals,
+        conclusion=conclusion,
+        key_findings=[*key_findings, *generated_key_findings],
+        recommendations=recommendations,
+    )
+
+
+def _build_report_model(
+    *,
+    record: RunRecord,
+    steps: list[StepLog],
+    success: bool,
+    last_progress_summary: str,
+    friction_signals: list[str],
+    conclusion: ReportConclusion,
+    key_findings: list[str],
+    recommendations: list[str],
+) -> RunReport:
     return RunReport(
         run_id=record.run_id,
         status="succeeded" if success else "failed",
@@ -60,7 +137,7 @@ def build_run_report(record: RunRecord, steps: list[StepLog]) -> RunReport:
         task=record.task,
         total_steps=len(steps),
         friction_signals=friction_signals,
-        key_findings=final_key_findings,
+        key_findings=_dedupe_text_items(key_findings),
         next_recommendations=recommendations,
         step_details=[_serialize_step(step) for step in steps],
         error_type=record.error_type,
@@ -192,6 +269,28 @@ def _should_generate_detailed_report(
     return not success or _looks_like_problem_summary(last_progress_summary)
 
 
+def _build_recommendation_messages(
+    record: RunRecord,
+    steps: list[StepLog],
+    success: bool,
+    friction_signals: list[str],
+    last_progress_summary: str,
+    fallback_conclusion: ReportConclusion,
+) -> list[Any]:
+    prompt_payload = _build_recommendation_payload(
+        record,
+        steps,
+        success,
+        friction_signals,
+        last_progress_summary,
+        fallback_conclusion,
+    )
+    return [
+        SystemMessage(content=RECOMMENDATION_SYSTEM_PROMPT),
+        HumanMessage(content=json.dumps(prompt_payload, ensure_ascii=False, indent=2)),
+    ]
+
+
 def _generate_report_analysis(
     record: RunRecord,
     steps: list[StepLog],
@@ -204,7 +303,7 @@ def _generate_report_analysis(
     if llm is None:
         return {}
 
-    prompt_payload = _build_recommendation_payload(
+    messages = _build_recommendation_messages(
         record,
         steps,
         success,
@@ -212,13 +311,39 @@ def _generate_report_analysis(
         last_progress_summary,
         fallback_conclusion,
     )
-    messages = [
-        SystemMessage(content=RECOMMENDATION_SYSTEM_PROMPT),
-        HumanMessage(content=json.dumps(prompt_payload, ensure_ascii=False, indent=2)),
-    ]
 
     try:
         response = llm.invoke(messages)
+    except Exception:
+        return {}
+
+    response_text = _extract_message_text(response)
+    return _parse_report_analysis(response_text)
+
+
+async def _generate_report_analysis_async(
+    record: RunRecord,
+    steps: list[StepLog],
+    success: bool,
+    friction_signals: list[str],
+    last_progress_summary: str,
+    fallback_conclusion: ReportConclusion,
+) -> dict[str, Any]:
+    llm = _build_recommendation_llm()
+    if llm is None:
+        return {}
+
+    messages = _build_recommendation_messages(
+        record,
+        steps,
+        success,
+        friction_signals,
+        last_progress_summary,
+        fallback_conclusion,
+    )
+
+    try:
+        response = await llm.ainvoke(messages)
     except Exception:
         return {}
 

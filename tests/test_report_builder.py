@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any, cast
 
 from backend.analysis import report_builder
-from backend.analysis.report_builder import build_run_report
+from backend.analysis.report_builder import build_run_report, build_run_report_async, build_run_report_without_llm
 from backend.schemas.run_schemas import (
     ActionInput,
     ActionName,
@@ -225,3 +226,66 @@ def test_build_run_report_passes_persona_context_into_recommendations(monkeypatc
     assert patient_report.next_recommendations == [
         "当前 persona 更有耐心，可优先优化任务完成态的确认信息。"
     ]
+
+
+def test_build_run_report_without_llm_skips_detailed_generation(monkeypatch) -> None:
+    def fail_if_called(*_args: Any, **_kwargs: Any):
+        raise AssertionError("report analysis generator should not be called")
+
+    monkeypatch.setattr(report_builder, "_generate_report_analysis", fail_if_called)
+
+    record = make_record()
+    steps = [
+        make_step(
+            validation_status="failed",
+            progress_summary="页面等待后仍无进展。",
+            friction_signals=["repeated_wait"],
+            detected_error=True,
+        )
+    ]
+
+    report = build_run_report_without_llm(record, steps)
+
+    assert report.success is False
+    assert report.conclusion == "fix"
+    assert report.next_recommendations == []
+
+
+class FakeAsyncReportLlm:
+    def __init__(self) -> None:
+        self.invoke_called = False
+        self.ainvoke_called = False
+
+    def invoke(self, _messages):
+        self.invoke_called = True
+        raise AssertionError("sync invoke should not be used in async report path")
+
+    async def ainvoke(self, _messages):
+        self.ainvoke_called = True
+
+        class Response:
+            content = '{"conclusion":"fix","key_findings":["异步分析发现"],"next_recommendations":["异步建议"]}'
+
+        return Response()
+
+
+def test_build_run_report_async_uses_async_llm(monkeypatch) -> None:
+    fake_llm = FakeAsyncReportLlm()
+    monkeypatch.setattr(report_builder, "_build_recommendation_llm", lambda: fake_llm)
+
+    record = make_record()
+    steps = [
+        make_step(
+            validation_status="failed",
+            progress_summary="页面等待后仍无进展。",
+            friction_signals=["repeated_wait"],
+            detected_error=True,
+        )
+    ]
+
+    report = asyncio.run(build_run_report_async(record, steps))
+
+    assert fake_llm.ainvoke_called is True
+    assert fake_llm.invoke_called is False
+    assert "异步分析发现" in report.key_findings
+    assert report.next_recommendations == ["异步建议"]

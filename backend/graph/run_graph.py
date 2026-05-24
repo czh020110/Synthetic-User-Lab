@@ -19,7 +19,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, SecretStr, ValidationError
 
-from backend.analysis.report_builder import build_run_report
+from backend.analysis.report_builder import build_run_report_async, build_run_report_without_llm
 from backend.analysis.validator import validate_progress
 from backend.core.config import get_settings
 from backend.execution.observer import observe_page
@@ -39,8 +39,6 @@ from backend.schemas.run_schemas import ActionInput, Persona, RunErrorType, RunR
 from backend.stores.in_memory_run_store import run_store
 
 logger = logging.getLogger(__name__)
-checkpointer = InMemorySaver()
-settings = get_settings()
 MODEL_API_RETRY_LIMIT = 5
 MODEL_FORMAT_RETRY_LIMIT = 3
 
@@ -115,15 +113,19 @@ validate_input_prompt = ChatPromptTemplate.from_messages([("user", validate_inpu
 wait_observe_system_prompt = ChatPromptTemplate.from_template(wait_observe)
 wait_observe_input_prompt = ChatPromptTemplate.from_messages([("user", wait_observe_input)])
 
-if not settings.api_key:
-    raise ValueError("API key is required for the configured model provider.")
 def _create_chat_model(model_name: str) -> Any:
+    settings = get_settings()
+    if not settings.api_key:
+        raise ValueError("API key is required for the configured model provider.")
+    if not model_name:
+        raise ValueError("Model name is required for the configured model provider.")
+
     if settings.model_provider == "openai":
         from langchain_openai import ChatOpenAI
 
         return ChatOpenAI(
             model=model_name,
-            api_key=SecretStr(settings.api_key) if settings.api_key else None,
+            api_key=SecretStr(settings.api_key),
             base_url=settings.base_url,
         )
     if settings.model_provider == "dashscope":
@@ -131,18 +133,18 @@ def _create_chat_model(model_name: str) -> Any:
 
         return ChatTongyi(
             model=model_name,
-            api_key=SecretStr(settings.api_key) if settings.api_key else None,
+            api_key=SecretStr(settings.api_key),
         )
     raise ValueError(f"Unsupported model provider: {settings.model_provider}")
 
 
-model = _create_chat_model(settings.model_name)
-wait_model = _create_chat_model(settings.fast_model_name or settings.model_name)
-
-
 def create_run_agents(persona: Persona, task: Task) -> tuple[Any, Any, Any]:
     """为当前 run 创建决策、验证与等待观察 agent。"""
-
+    # 将创建模型迁移到节点内部
+    settings = get_settings()
+    model = _create_chat_model(settings.model_name)
+    wait_model = _create_chat_model(settings.fast_model_name or settings.model_name)
+    checkpointer = InMemorySaver()
     decide_agent = create_agent(
         model=model,
         tools=[],
@@ -179,6 +181,7 @@ def create_run_agents(persona: Persona, task: Task) -> tuple[Any, Any, Any]:
 async def init_session(state: RunState) -> dict:
     """创建浏览器会话并进入起始页面。"""
 
+    settings = get_settings()
     request = state["request"]
     headless = settings.browser_headless if request.headless is None else request.headless
     logger.info("initializing run session, run_id=%s headless=%s", state["run_id"], headless)
@@ -599,7 +602,7 @@ async def finalize_report(state: RunState) -> dict:
         raise ValueError("Run record is missing before report generation.")
 
     try:
-        report = build_run_report(record, state.get("step_logs", []))
+        report = await build_run_report_async(record, state.get("step_logs", []))
         run_store.complete_run(state["run_id"], report)
         return {"report": report}
     finally:
@@ -687,7 +690,7 @@ async def run_workflow(
 
         record = run_store.get_record(run_id)
         if record is not None and run_store.get_report(run_id) is None:
-            report = build_run_report(record, run_store.get_steps(run_id) or [])
+            report = build_run_report_without_llm(record, run_store.get_steps(run_id) or [])
             report = report.model_copy(
                 update={
                     "status": "failed",

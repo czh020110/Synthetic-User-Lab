@@ -7,44 +7,61 @@ from __future__ import annotations
 # 模块接口说明: get_settings() 返回全局配置对象
 
 import os
-from functools import lru_cache  # 给 get_settings() 做缓存，避免重复创建配置对象
+from functools import lru_cache
 from pathlib import Path
 
 from pydantic import BaseModel
 
-from backend.ai_api.provider_router import load_dotenv, BASE_DIR, get_model_router
+from backend.ai_api.provider_router import BASE_DIR, get_model_router, load_dotenv
 
-load_dotenv()
-model_router = get_model_router()
 
-# 系统或脚本或编辑器ide的环境变量
 class Settings(BaseModel):
     """保存当前项目运行所需的最小配置。"""
 
-    app_name: str = os.getenv("SYNTHETIC_USER_LAB_APP_NAME", "Synthetic User Lab")
-    app_env: str = os.getenv("SYNTHETIC_USER_LAB_ENV", "development")
-    api_prefix: str = os.getenv("SYNTHETIC_USER_LAB_API_PREFIX", "/api/v1")
-    app_host: str = os.getenv("SYNTHETIC_USER_LAB_HOST", "127.0.0.1")
-    app_port: int = int(os.getenv("SYNTHETIC_USER_LAB_PORT", "8000"))
-    app_base_url: str = os.getenv("SYNTHETIC_USER_LAB_BASE_URL", "http://127.0.0.1:8000")
-    browser_headless: bool = os.getenv("SYNTHETIC_USER_LAB_HEADLESS", "true").lower() != "false"
-    run_step_limit: int = int(os.getenv("SYNTHETIC_USER_LAB_RUN_STEP_LIMIT", "8"))
-    demo_site_dir: Path = BASE_DIR / "backend" / "fixtures" / "demo_site"
-    screenshot_dir: Path = BASE_DIR / "screenshots"
-    # openai模型配置
-    custom_system_prompt : str = os.getenv("CUSTOM_SYSTEM_PROMPT", "")
-    model_provider : str = model_router.model_provider
-    base_url: str = model_router.base_url
-    api_key: str = model_router.api_key
-    model_name: str = model_router.model_name
-    fast_model_name: str = model_router.fast_model_name
-@lru_cache(maxsize=1)  # 进程只保留一个settings实例
-def get_settings() -> Settings:
-    """返回全局配置对象。"""
+    app_name: str
+    app_env: str
+    api_prefix: str
+    app_host: str
+    app_port: int
+    app_base_url: str
+    browser_headless: bool
+    run_step_limit: int
+    demo_site_dir: Path
+    screenshot_dir: Path
+    custom_system_prompt: str
+    model_provider: str
+    base_url: str
+    api_key: str
+    model_name: str
+    fast_model_name: str
 
-    settings = Settings()
-    settings.api_prefix = settings.api_prefix if settings.api_prefix.startswith("/") else f"/{settings.api_prefix}"
-    # .mkdir: pathlib.Path 对象的方法
-    settings.demo_site_dir.mkdir(parents=True, exist_ok=True)  # 确保demo目录存在
-    settings.screenshot_dir.mkdir(parents=True, exist_ok=True)  # 确保截图目录存在
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """返回全局配置对象。只有get settings的时候才会加载环境变量配置"""
+
+    load_dotenv()
+    model_router = get_model_router()
+    api_prefix = os.getenv("SYNTHETIC_USER_LAB_API_PREFIX", "/api/v1")
+    api_prefix = api_prefix if api_prefix.startswith("/") else f"/{api_prefix}"
+    settings = Settings(
+        app_name=os.getenv("SYNTHETIC_USER_LAB_APP_NAME", "Synthetic User Lab"),
+        app_env=os.getenv("SYNTHETIC_USER_LAB_ENV", "development"),
+        api_prefix=api_prefix,
+        app_host=os.getenv("SYNTHETIC_USER_LAB_HOST", "127.0.0.1"),
+        app_port=int(os.getenv("SYNTHETIC_USER_LAB_PORT", "8000")),
+        app_base_url=os.getenv("SYNTHETIC_USER_LAB_BASE_URL", "http://127.0.0.1:8000"),
+        browser_headless=os.getenv("SYNTHETIC_USER_LAB_HEADLESS", "true").lower() != "false",
+        run_step_limit=int(os.getenv("SYNTHETIC_USER_LAB_RUN_STEP_LIMIT", "8")),
+        demo_site_dir=BASE_DIR / "backend" / "fixtures" / "demo_site",
+        screenshot_dir=BASE_DIR / "screenshots",
+        custom_system_prompt=os.getenv("CUSTOM_SYSTEM_PROMPT", ""),
+        model_provider=model_router.model_provider,
+        base_url=model_router.base_url,
+        api_key=model_router.api_key,
+        model_name=model_router.model_name,
+        fast_model_name=model_router.fast_model_name,
+    )
+    settings.demo_site_dir.mkdir(parents=True, exist_ok=True)
+    settings.screenshot_dir.mkdir(parents=True, exist_ok=True)
     return settings

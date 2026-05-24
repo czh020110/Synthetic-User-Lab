@@ -41,15 +41,6 @@ def validate_progress(
             detected_error=True,
         )
 
-    if current_step_index >= task.max_steps:
-        return ValidationResult(
-            status="failed",
-            should_stop=True,
-            progress_summary="超过最大步数限制，结束本次运行。",
-            friction_signals=["step_limit_reached"],
-            detected_error=True,
-        )
-
     base_result = _normalize_agent_validation(agent_validation)
 
     if base_result.status == "succeeded":
@@ -61,6 +52,15 @@ def validate_progress(
                 "detected_error": False,
                 "should_stop": True,
             }
+        )
+
+    if current_step_index >= task.max_steps:
+        return ValidationResult(
+            status="failed",
+            should_stop=True,
+            progress_summary="超过最大步数限制，结束本次运行。",
+            friction_signals=["step_limit_reached"],
+            detected_error=True,
         )
 
     wait_streak = _count_consecutive_waits(previous_steps, current_action)

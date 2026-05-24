@@ -108,6 +108,8 @@ class ActionInput(BaseModel):
     def _normalize_and_validate(self) -> "ActionInput":
         if self.action in {"click", "fill", "navigate"} and not self.target:
             raise ValueError(f"target is required for {self.action} actions.")
+        if self.action == "fill" and self.value is None:
+            raise ValueError("value is required for fill actions.")
         if self.action == "wait" and self.value is None:
             self.value = 300
         if self.action == "fill" and self.value is not None and not isinstance(self.value, str):
