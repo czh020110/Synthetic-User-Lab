@@ -11,6 +11,7 @@ from backend.main import app
 from backend.schemas.run_schemas import (
     ActionInput,
     ExecutionResult,
+    NavigateActionPayload,
     ObservedPageState,
     Persona,
     RetrievedContextItem,
@@ -19,6 +20,7 @@ from backend.schemas.run_schemas import (
     StepLog,
     Task,
     ValidationResult,
+    WaitActionPayload,
 )
 from backend.stores.in_memory_run_store import run_store
 
@@ -128,7 +130,7 @@ def test_steps_and_report_expose_recovery_branch_snapshots() -> None:
     wait_step = StepLog(
         step_index=1,
         observed_page_state=_make_page_state("动作前页面", "screenshots/run-recovery-api/step-1-before.png"),
-        decided_action=ActionInput(action="wait", target=None, value=1000, reason="等待页面恢复"),
+        decided_action=ActionInput(action="wait", payload=WaitActionPayload(duration_ms=1000), reason="等待页面恢复"),
         execution_result=ExecutionResult(action="wait", success=True, detail="wait 动作已进入等待观察节点处理。"),
         validation_result=ValidationResult(
             status="running",
@@ -162,7 +164,7 @@ def test_steps_and_report_expose_recovery_branch_snapshots() -> None:
         observed_page_state=_make_page_state("恢复前页面", "screenshots/run-recovery-api/step-2-before.png"),
         decided_action=ActionInput(
             action="navigate",
-            target="http://testserver/demo/index.html",
+            payload=NavigateActionPayload(url="http://testserver/demo/index.html"),
             reason="页面卡住或偏离后，回到任务起始页重新进入主流程。",
         ),
         execution_result=ExecutionResult(action="navigate", success=True, detail="动作 navigate 执行成功。"),

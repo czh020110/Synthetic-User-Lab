@@ -15,18 +15,15 @@ decide = """
 {task}
 
 可选动作：
-- click：点击页面上已经观察到的可点击元素。
-- fill：填写页面上已经观察到的表单字段。
-- wait：等待页面状态变化。
-- navigate：跳转到任务允许的 URL。
+{action_definitions}
 
 输出要求：
 - 只输出一个 JSON 对象，不要输出 Markdown，不要输出解释性段落。
 - JSON 必须符合以下字段：
   - action：动作名称。
-  - target：目标选择器或目标对象；当 action 为 wait 时可以为 null。
-  - value：填写内容、等待毫秒数或跳转 URL；wait 的毫秒数可以是数字；没有则用 null。
+  - payload：动作参数对象，必须与 action 匹配。
   - reason：一句中文说明，解释为什么选择这个动作。
+- 不要输出旧字段 target 或 value。
 
 决策原则：
 - 当前 task 的具体测试目标、需要填写的示例数据或限制，以 task.description 为准。

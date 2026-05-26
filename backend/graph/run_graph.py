@@ -36,7 +36,17 @@ from backend.prompt.graph import (
     wait_observe_input,
 )
 from backend.retrieval.minimal_context import render_retrieval_context
-from backend.schemas.run_schemas import ActionInput, Persona, RunErrorType, RunRequest, StepLog, Task, ValidationResult
+from backend.schemas.run_schemas import (
+    ActionInput,
+    NavigateActionPayload,
+    Persona,
+    RunErrorType,
+    RunRequest,
+    StepLog,
+    Task,
+    ValidationResult,
+    render_action_definitions,
+)
 from backend.stores.in_memory_run_store import run_store
 
 logger = logging.getLogger(__name__)
@@ -99,7 +109,7 @@ def build_history_summary(step_logs: list[StepLog]) -> str:
     if not step_logs:
         return "暂无历史步骤。"
     return "\n".join(
-        f"第{step.step_index}步: 动作={step.decided_action.action} 目标={step.decided_action.target} "
+        f"第{step.step_index}步: 动作={step.decided_action.action} 参数={step.decided_action.payload.model_dump(mode='json')} "
         f"执行成功={step.execution_result.success} 验证状态={step.validation_result.status} "
         f"总结={step.validation_result.progress_summary}"
         for step in step_logs
@@ -153,6 +163,7 @@ def create_run_agents(persona: Persona, task: Task) -> tuple[Any, Any, Any]:
         system_prompt=decide_system_prompt.format(
             persona=persona.model_dump_json(indent=2),
             task=task.model_dump_json(indent=2),
+            action_definitions=render_action_definitions(),
         ),
         response_format=ActionInput,
     )
@@ -583,7 +594,7 @@ async def prepare_recovery_action(state: RunState) -> dict:
     return {
         "current_action": ActionInput(
             action="navigate",
-            target=task.start_url,
+            payload=NavigateActionPayload(url=task.start_url),
             reason="页面卡住或偏离后，回到任务起始页重新进入主流程。",
         ),
         "current_page_state": page_state,

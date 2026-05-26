@@ -184,9 +184,9 @@ def _count_consecutive_action_target(previous_steps: list[StepLog], current_acti
         return 0
 
     streak = 1
-    current_signature = (current_action.action, current_action.target)
+    current_signature = (current_action.action, current_action.payload.model_dump(mode="json"))
     for step in reversed(previous_steps):
-        previous_signature = (step.decided_action.action, step.decided_action.target)
+        previous_signature = (step.decided_action.action, step.decided_action.payload.model_dump(mode="json"))
         if previous_signature != current_signature:
             break
         streak += 1

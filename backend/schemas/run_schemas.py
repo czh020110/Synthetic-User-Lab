@@ -6,20 +6,94 @@ from __future__ import annotations
 # 模块数据流: API 请求 -> LangGraph 状态 -> 执行结果/报告 -> API 响应
 # 模块接口说明: 各 BaseModel 作为模块间统一输入输出结构
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-ActionName = Literal["navigate", "click", "fill", "wait"]
-WaitObservationStatus = Literal["success", "actionable", "normal_timeout", "abnormal_stuck"]
-WaitObservationDecisionName = Literal["normal_waiting", "abnormal_stuck", "ready_for_next_action", "task_completed"]
-RunStatus = Literal["queued", "running", "succeeded", "failed"]
-RunErrorType = Literal["model_error", "system_error"]
-ValidationStatus = Literal["running", "succeeded", "failed"]
-ReportConclusion = Literal["keep", "optimize", "fix"]
-RetrievalSourceType = Literal["product_knowledge", "failure_case"]
+ActionName: TypeAlias = Literal["navigate", "click", "fill", "wait"]
+WaitObservationStatus: TypeAlias = Literal["success", "actionable", "normal_timeout", "abnormal_stuck"]
+WaitObservationDecisionName: TypeAlias = Literal[
+    "normal_waiting", "abnormal_stuck", "ready_for_next_action", "task_completed"
+]
+RunStatus: TypeAlias = Literal["queued", "running", "succeeded", "failed"]
+RunErrorType: TypeAlias = Literal["model_error", "system_error"]
+ValidationStatus: TypeAlias = Literal["running", "succeeded", "failed"]
+ReportConclusion: TypeAlias = Literal["keep", "optimize", "fix"]
+RetrievalSourceType: TypeAlias = Literal["product_knowledge", "failure_case"]
+
+
+class ClickActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selector: str = Field(..., min_length=1)
+
+
+class FillActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selector: str = Field(..., min_length=1)
+    value: str = Field(..., min_length=1)
+
+
+class WaitActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    duration_ms: int = Field(default=1000, ge=0)
+
+
+class NavigateActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(..., min_length=1)
+
+
+ActionPayload: TypeAlias = ClickActionPayload | FillActionPayload | WaitActionPayload | NavigateActionPayload
+
+
+@dataclass(frozen=True)
+class ActionDefinition:
+    name: ActionName
+    description: str
+    payload_model: type[ActionPayload]
+    payload_description: str
+
+
+ACTION_REGISTRY: dict[ActionName, ActionDefinition] = {
+    "navigate": ActionDefinition(
+        name="navigate",
+        description="跳转到任务允许的 URL。",
+        payload_model=NavigateActionPayload,
+        payload_description='payload 必须为 {"url": "目标 URL"}',
+    ),
+    "click": ActionDefinition(
+        name="click",
+        description="点击页面上已经观察到的可点击元素。",
+        payload_model=ClickActionPayload,
+        payload_description='payload 必须为 {"selector": "CSS 选择器"}',
+    ),
+    "fill": ActionDefinition(
+        name="fill",
+        description="填写页面上已经观察到的表单字段。",
+        payload_model=FillActionPayload,
+        payload_description='payload 必须为 {"selector": "CSS 选择器", "value": "填写内容"}',
+    ),
+    "wait": ActionDefinition(
+        name="wait",
+        description="等待页面状态变化。",
+        payload_model=WaitActionPayload,
+        payload_description='payload 必须为 {"duration_ms": 等待毫秒数}，没有明确时使用 1000',
+    ),
+}
+
+
+def render_action_definitions() -> str:
+    return "\n".join(
+        f"- {definition.name}：{definition.description}{definition.payload_description}。"
+        for definition in ACTION_REGISTRY.values()
+    )
 
 
 def utc_now() -> datetime:
@@ -109,23 +183,17 @@ class ObservedPageState(BaseModel):
 class ActionInput(BaseModel):
     """描述下一步受控动作。"""
 
-    action: ActionName  # "navigate", "click"...
-    target: str | None = None  # 动作目标元素；wait 动作允许为空
-    value: str | int | None = None  # 动作附带值(非所有动作都需要,例如: fill 需要填内容, wait 可填写毫秒数)
-    reason: str = ""  # 执行动作的原因
+    model_config = ConfigDict(extra="forbid")
+
+    action: ActionName
+    payload: ActionPayload
+    reason: str = ""
 
     @model_validator(mode="after")
     def _normalize_and_validate(self) -> "ActionInput":
-        if self.action in {"click", "fill", "navigate"} and not self.target:
-            raise ValueError(f"target is required for {self.action} actions.")
-        if self.action == "fill" and self.value is None:
-            raise ValueError("value is required for fill actions.")
-        if self.action == "wait" and self.value is None:
-            self.value = 300
-        if self.action == "fill" and self.value is not None and not isinstance(self.value, str):
-            self.value = str(self.value)
-        if self.action == "wait" and self.value is not None and not isinstance(self.value, str | int):
-            self.value = str(self.value)
+        definition = ACTION_REGISTRY[self.action]
+        if not isinstance(self.payload, definition.payload_model):
+            self.payload = definition.payload_model.model_validate(self.payload.model_dump())
         return self
 
 

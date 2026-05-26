@@ -431,7 +431,7 @@ def _serialize_step(step: StepLog) -> dict[str, Any]:
         "step_index": step.step_index,
         "before_page_state": step.observed_page_state.model_dump(mode="json"),
         "action": step.decided_action.action,
-        "target": step.decided_action.target,
+        "payload": step.decided_action.payload.model_dump(mode="json"),
         "action_reason": step.decided_action.reason,
         "execution_success": step.execution_result.success,
         "execution_detail": step.execution_result.detail,
@@ -466,7 +466,7 @@ def _summarize_problem_pattern(steps: list[StepLog]) -> dict[str, Any]:
         "friction_counts": friction_counts,
         "problem_step_indexes": problem_step_indexes,
         "last_actions": [step.decided_action.action for step in steps[-3:]],
-        "last_targets": [step.decided_action.target for step in steps[-3:]],
+        "last_action_payloads": [step.decided_action.payload.model_dump(mode="json") for step in steps[-3:]],
         "last_validation_summaries": [step.validation_result.progress_summary for step in steps[-3:]],
     }
 

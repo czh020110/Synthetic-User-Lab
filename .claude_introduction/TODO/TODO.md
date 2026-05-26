@@ -2,7 +2,11 @@
 
 ## 进行中
 
-无
+- [ ] T-022（P0）：收口动作模型与执行链路
+  - 来源 STEP：无
+  - 依赖：无
+  - 验收标准：ActionInput 使用分动作 payload/registry 统一校验与 prompt 渲染，执行器、验证器、报告与回归测试不再依赖 target/value 平面字段
+  - 当前进展：开始收口 ActionInput schema/registry/prompt，并迁移执行与分析链路
 
 ## 未开始
 

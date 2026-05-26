@@ -12,7 +12,10 @@ import backend.graph.run_graph as run_graph
 from backend.schemas.run_schemas import (
     ActionInput,
     ActionName,
+    ClickActionPayload,
     ExecutionResult,
+    FillActionPayload,
+    NavigateActionPayload,
     ObservedPageState,
     Persona,
     RetrievedContextItem,
@@ -21,6 +24,7 @@ from backend.schemas.run_schemas import (
     StepLog,
     Task,
     ValidationResult,
+    WaitActionPayload,
 )
 from backend.graph.wait_observer import WaitObservationResult, WaitObservationTrace
 from backend.stores.in_memory_run_store import run_store
@@ -41,9 +45,18 @@ def make_page_state(url: str = START_URL, text: str = "提交体验表单", erro
 
 
 def make_action(action: ActionName, target: str | None = "#start-demo", value: str | int | None = None) -> ActionInput:
-    if action == "fill" and value is None:
-        value = "test value"
-    return ActionInput(action=action, target=target, value=value, reason="test")
+    if action == "navigate":
+        payload = NavigateActionPayload(url=target if target is not None else START_URL)
+    elif action == "click":
+        payload = ClickActionPayload(selector=target if target is not None else "body")
+    elif action == "fill":
+        payload = FillActionPayload(
+            selector=target if target is not None else "body",
+            value=str(value) if value is not None else "test value",
+        )
+    else:
+        payload = WaitActionPayload(duration_ms=int(value) if value is not None else 1000)
+    return ActionInput(action=action, payload=payload, reason="test")
 
 
 def make_execution_result(
@@ -87,16 +100,16 @@ def make_step(
 
 
 def test_action_input_allows_wait_without_target() -> None:
-    action = ActionInput(action="wait", target=None, value=2000, reason="test")
+    action = ActionInput(action="wait", payload=WaitActionPayload(duration_ms=2000), reason="test")
 
     assert action.action == "wait"
-    assert action.target is None
-    assert action.value == 2000
+    assert isinstance(action.payload, WaitActionPayload)
+    assert action.payload.duration_ms == 2000
 
 
 def test_action_input_requires_fill_value() -> None:
     with pytest.raises(ValidationError):
-        ActionInput(action="fill", target="#name", reason="test")
+        ActionInput(action="fill", payload=FillActionPayload(selector="#name", value=""), reason="test")
 
 
 def test_route_after_execute_wait_goes_to_wait_node() -> None:
@@ -859,7 +872,8 @@ def test_prepare_recovery_action_builds_controlled_navigate() -> None:
     result = asyncio.run(run_graph.prepare_recovery_action(state))
 
     assert result["current_action"].action == "navigate"
-    assert result["current_action"].target == START_URL
+    assert isinstance(result["current_action"].payload, NavigateActionPayload)
+    assert result["current_action"].payload.url == START_URL
     assert result["current_page_state"].visible_text_summary == "空白页面"
     assert result["recovery_attempted"] is True
     assert result["wait_observation_status"] is None
@@ -959,7 +973,7 @@ class BadFormatThenValidDecideAgent:
         return {
             "structured_response": ActionInput(
                 action="click",
-                target="#submit",
+                payload=ClickActionPayload(selector="#submit"),
                 reason="格式修正后继续执行",
             ).model_dump()
         }

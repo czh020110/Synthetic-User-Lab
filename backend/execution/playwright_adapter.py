@@ -9,7 +9,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from backend.schemas.run_schemas import ActionInput, ExecutionResult
+from backend.schemas.run_schemas import (
+    ActionInput,
+    ClickActionPayload,
+    ExecutionResult,
+    FillActionPayload,
+    NavigateActionPayload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,17 +56,17 @@ async def execute_action(page: Any, action: ActionInput) -> ExecutionResult:
 
     try:
         if action.action == "navigate":  # 跳转到目标 URL
-            if action.target is None:
-                raise ValueError("navigate action requires target.")
-            await page.goto(action.target, wait_until="domcontentloaded")
+            if not isinstance(action.payload, NavigateActionPayload):
+                raise ValueError("navigate action requires url payload.")
+            await page.goto(action.payload.url, wait_until="domcontentloaded")
         elif action.action == "click":  # 找到目标元素并点击
-            if action.target is None:
-                raise ValueError("click action requires target.")
-            await page.locator(action.target).click()
+            if not isinstance(action.payload, ClickActionPayload):
+                raise ValueError("click action requires selector payload.")
+            await page.locator(action.payload.selector).click()
         elif action.action == "fill":  # 向输入框填写
-            if action.target is None:
-                raise ValueError("fill action requires target.")
-            await page.locator(action.target).fill(str(action.value or ""))
+            if not isinstance(action.payload, FillActionPayload):
+                raise ValueError("fill action requires selector and value payload.")
+            await page.locator(action.payload.selector).fill(action.payload.value)
         elif action.action == "wait":  # 等待动作交由 graph 等待观察节点处理
             pass
         else:  # 其他不支持动作直接报错

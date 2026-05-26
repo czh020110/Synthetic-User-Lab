@@ -8,6 +8,7 @@ from backend.analysis.report_builder import build_run_report, build_run_report_a
 from backend.schemas.run_schemas import (
     ActionInput,
     ActionName,
+    ClickActionPayload,
     ExecutionResult,
     ObservedPageState,
     Persona,
@@ -54,7 +55,7 @@ def make_step(
             form_fields=[],
             error_messages=[],
         ),
-        decided_action=ActionInput(action=cast(ActionName, action), target=target, reason="test"),
+        decided_action=ActionInput(action=cast(ActionName, action), payload=ClickActionPayload(selector=target), reason="test"),
         execution_result=ExecutionResult(
             action=cast(ActionName, action),
             success=execution_success,
