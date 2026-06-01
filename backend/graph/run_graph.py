@@ -23,7 +23,7 @@ from backend.analysis.report_builder import build_run_report_async, build_run_re
 from backend.analysis.validator import validate_progress
 from backend.core.config import get_settings
 from backend.execution.observer import observe_page
-from backend.execution.playwright_adapter import close_browser_session, create_browser_session, execute_action
+from backend.execution.playwright_adapter import TERMINAL_ACTIONS, close_browser_session, create_browser_session, execute_action
 from backend.graph.run_state import RunState
 from backend.graph.wait_observer import WaitObservationDecision, WaitObservationOptions, observe_until_ready
 from backend.prompt.graph import (
@@ -39,6 +39,7 @@ from backend.retrieval.minimal_context import render_retrieval_context
 from backend.schemas.run_schemas import (
     ActionInput,
     NavigateActionPayload,
+    ObservedPageState,
     Persona,
     RunErrorType,
     RunRequest,
@@ -393,11 +394,13 @@ async def wait_after_action(state: RunState) -> dict:
 
 
 def route_after_execute(state: RunState) -> str:
-    """wait 动作统一交给等待观察节点处理。"""
- 
+    """wait 交给等待观察，终止动作直接验证，其余观察页面。"""
+
     action = state.get("current_action")
     if action is not None and action.action == "wait":
         return "wait_after_action"
+    if action is not None and action.action in TERMINAL_ACTIONS:
+        return "validate_progress"
     return "observe_after_action"
 
 
@@ -455,6 +458,19 @@ async def validate_current_progress(state: RunState) -> dict:
     execution_result = state.get("current_execution_result")
     if session is None or task is None or execution_result is None:
         raise ValueError("Validation prerequisites are missing.")
+
+    current_action = state.get("current_action")
+    if current_action is not None and current_action.action in TERMINAL_ACTIONS:
+        return {
+            "current_page_state": state.get("current_page_state") or ObservedPageState(current_url="", title="", visible_text_summary=""),
+            "current_validation_result": ValidationResult(
+                status="failed",
+                should_stop=True,
+                progress_summary=execution_result.detail,
+                detected_error=True,
+            ),
+            "should_stop": True,
+        }
 
     page = session["page"]
     page_state = state.get("current_page_state")
@@ -652,7 +668,11 @@ def build_run_graph(load_context_node: Any):
     workflow.add_conditional_edges(
         "execute_action",
         route_after_execute,
-        {"wait_after_action": "wait_after_action", "observe_after_action": "observe_after_action"},
+        {
+            "wait_after_action": "wait_after_action",
+            "observe_after_action": "observe_after_action",
+            "validate_progress": "validate_progress",
+        },
     )
     workflow.add_edge("observe_after_action", "validate_progress")
     workflow.add_conditional_edges(

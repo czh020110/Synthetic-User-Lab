@@ -10,6 +10,8 @@ from backend.schemas.run_schemas import (
     ActionName,
     ClickActionPayload,
     ExecutionResult,
+    FillActionPayload,
+    NavigateActionPayload,
     ObservedPageState,
     Persona,
     RunRecord,
@@ -290,3 +292,58 @@ def test_build_run_report_async_uses_async_llm(monkeypatch) -> None:
     assert fake_llm.invoke_called is False
     assert "异步分析发现" in report.key_findings
     assert report.next_recommendations == ["异步建议"]
+
+
+def test_step_details_serialize_payload_for_each_action_type() -> None:
+    record = make_record()
+    click_step = StepLog(
+        step_index=1,
+        observed_page_state=ObservedPageState(
+            current_url=START_URL, title="demo", visible_text_summary="页面",
+            clickable_elements=[], form_fields=[], error_messages=[],
+        ),
+        decided_action=ActionInput(action="click", payload=ClickActionPayload(selector="#btn"), reason="点击按钮"),
+        execution_result=ExecutionResult(action="click", success=True, detail="ok"),
+        validation_result=ValidationResult(status="running", should_stop=False, progress_summary="继续"),
+        post_action_page_state=ObservedPageState(
+            current_url=START_URL, title="demo", visible_text_summary="点击后",
+            clickable_elements=[], form_fields=[], error_messages=[],
+        ),
+    )
+    fill_step = StepLog(
+        step_index=2,
+        observed_page_state=ObservedPageState(
+            current_url=START_URL, title="demo", visible_text_summary="表单",
+            clickable_elements=[], form_fields=[], error_messages=[],
+        ),
+        decided_action=ActionInput(action="fill", payload=FillActionPayload(selector="#input", value="test"), reason="填写输入框"),
+        execution_result=ExecutionResult(action="fill", success=True, detail="ok"),
+        validation_result=ValidationResult(status="running", should_stop=False, progress_summary="继续"),
+        post_action_page_state=ObservedPageState(
+            current_url=START_URL, title="demo", visible_text_summary="填写后",
+            clickable_elements=[], form_fields=[], error_messages=[],
+        ),
+    )
+    navigate_step = StepLog(
+        step_index=3,
+        observed_page_state=ObservedPageState(
+            current_url=START_URL, title="demo", visible_text_summary="导航前",
+            clickable_elements=[], form_fields=[], error_messages=[],
+        ),
+        decided_action=ActionInput(action="navigate", payload=NavigateActionPayload(url=START_URL), reason="导航"),
+        execution_result=ExecutionResult(action="navigate", success=True, detail="ok"),
+        validation_result=ValidationResult(status="succeeded", should_stop=True, progress_summary="完成", detected_success=True),
+        post_action_page_state=ObservedPageState(
+            current_url=START_URL, title="demo", visible_text_summary="完成",
+            clickable_elements=[], form_fields=[], error_messages=[],
+        ),
+    )
+
+    report = build_run_report_without_llm(record, [click_step, fill_step, navigate_step])
+
+    assert report.step_details[0]["action"] == "click"
+    assert report.step_details[0]["payload"] == {"selector": "#btn"}
+    assert report.step_details[1]["action"] == "fill"
+    assert report.step_details[1]["payload"] == {"selector": "#input", "value": "test"}
+    assert report.step_details[2]["action"] == "navigate"
+    assert report.step_details[2]["payload"] == {"url": START_URL}

@@ -204,3 +204,13 @@ def test_steps_and_report_expose_recovery_branch_snapshots() -> None:
     assert "wait_observe_abnormal_stuck" in report["friction_signals"]
     assert report["step_details"][0]["retrieval_context"] == report["step_details"][1]["retrieval_context"]
     assert {item["title"] for item in report["step_details"][0]["retrieval_context"]} == {"表单完成标准", "页面无响应恢复"}
+
+    assert steps[0]["decided_action"]["action"] == "wait"
+    assert steps[0]["decided_action"]["payload"]["duration_ms"] == 1000
+    assert steps[1]["decided_action"]["action"] == "navigate"
+    assert steps[1]["decided_action"]["payload"]["url"] == "http://testserver/demo/index.html"
+
+    assert report["step_details"][0]["action"] == "wait"
+    assert report["step_details"][0]["payload"]["duration_ms"] == 1000
+    assert report["step_details"][1]["action"] == "navigate"
+    assert report["step_details"][1]["payload"]["url"] == "http://testserver/demo/index.html"

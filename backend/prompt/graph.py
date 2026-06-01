@@ -23,7 +23,7 @@ decide = """
   - action：动作名称。
   - payload：动作参数对象，必须与 action 匹配。
   - reason：一句中文说明，解释为什么选择这个动作。
-- 不要输出旧字段 target 或 value。
+- 不要在顶层输出 target 或 value 字段；所有动作参数必须放在 payload 内（fill 的 payload.value 是合法且必需的）。
 
 决策原则：
 - 当前 task 的具体测试目标、需要填写的示例数据或限制，以 task.description 为准。

@@ -52,3 +52,4 @@ screenshots/
 
 .claude/settings.local.json
 .claude/.cache/
+.codegraph/

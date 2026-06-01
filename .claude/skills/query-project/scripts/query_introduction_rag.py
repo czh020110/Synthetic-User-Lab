@@ -118,6 +118,17 @@ def load_local_env(root: Path) -> None:
             os.environ.setdefault(key, value)
 
 
+def _is_covered(entry: str, entries: set[str]) -> bool:
+    if entry in entries:
+        return True
+    parts = entry.split("/")
+    for i in range(1, len(parts)):
+        parent = "/".join(parts[:i]) + "/"
+        if parent in entries:
+            return True
+    return False
+
+
 def check_gitignore(root: Path) -> None:
     project_root = project_root_from_claude_root(root)
     gitignore_path = project_root / ".gitignore"
@@ -125,7 +136,7 @@ def check_gitignore(root: Path) -> None:
         entries = {line.strip().replace("\\", "/") for line in gitignore_path.read_text(encoding="utf-8").splitlines()}
     else:
         entries = set()
-    missing = [entry for entry in REQUIRED_GITIGNORE_ENTRIES if entry not in entries]
+    missing = [entry for entry in REQUIRED_GITIGNORE_ENTRIES if not _is_covered(entry, entries)]
     if missing:
         raise GitignoreError(missing)
 
@@ -654,6 +665,13 @@ def resolve_api_key(primary_name: str, scoped_fallback_name: str) -> str | None:
     return env_value(primary_name, scoped_fallback_name, "RAG_API_KEY", "OPENAI_API_KEY", "DASHSCOPE_API_KEY")
 
 
+def preparse_root_path() -> Path:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--root", default=".claude")
+    args, _ = parser.parse_known_args()
+    return Path(args.root).resolve()
+
+
 def build_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     args = parser.parse_args()
     args.root_path = Path(args.root).resolve()
@@ -701,6 +719,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def parse_args() -> argparse.Namespace:
+    load_local_env(preparse_root_path())
     args = build_args(build_parser())
     return args
 

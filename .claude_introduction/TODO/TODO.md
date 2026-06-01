@@ -2,11 +2,7 @@
 
 ## 进行中
 
-- [ ] T-022（P0）：收口动作模型与执行链路
-  - 来源 STEP：无
-  - 依赖：无
-  - 验收标准：ActionInput 使用分动作 payload/registry 统一校验与 prompt 渲染，执行器、验证器、报告与回归测试不再依赖 target/value 平面字段
-  - 当前进展：开始收口 ActionInput schema/registry/prompt，并迁移执行与分析链路
+无
 
 ## 未开始
 
@@ -21,6 +17,13 @@
 无
 
 ## 最近完成
+
+- [x] T-022（P0）：收口动作模型与执行链路
+  - 来源 STEP：无
+  - 依赖：无
+  - 验收标准：ActionInput 使用分动作 payload/registry 统一校验与 prompt 渲染，执行器、验证器、报告与回归测试不再依赖 target/value 平面字段
+  - 完成日期：2026-05-28
+  - 验证方式：python -m pytest tests/test_validator.py tests/test_playwright_adapter.py tests/test_demo_run_api.py tests/test_report_builder.py -q (71/71 passed)
 
 - [x] T-021（P0）：实现基础 RAG 上下文层最小闭环
   - 来源 STEP：实现基础 RAG 上下文层
@@ -84,24 +87,3 @@
   - 完成日期：2026-04-24
   - 验证方式：配置读取人工检查、FastAPI 启动导入检查
   - 关联 Commit：添加.env文件导入环境变量设置函数
-
-- [x] T-004：将 demo graph 的决策与验证节点接入 run 级 agent
-  - 来源 STEP：S-001
-  - 验收标准：graph prompt 与 `demo_run_graph` 调用链人工检查、相关测试回归。
-  - 完成日期：2026-04-25
-  - 验证方式：graph prompt 与 `demo_run_graph` 调用链人工检查、相关测试回归
-  - 关联 Commit：添加demo graph 使用agent替代节点
-
-- [x] T-005：补齐 graph prompt、task schema 与 run 级上下文隔离逻辑
-  - 来源 STEP：S-001
-  - 验收标准：`tests/test_demo_run_api.py`、schema 与 prompt 链路人工检查。
-  - 完成日期：2026-04-25
-  - 验证方式：`tests/test_demo_run_api.py`、schema 与 prompt 链路人工检查
-  - 关联 Commit：修改graph prompt以及agent逻辑
-
-- [x] T-006：完成项目文档、阶段目标与核心数据流的结构化重整
-  - 来源 STEP：无
-  - 验收标准：文档人工检查。
-  - 完成日期：2026-04-27
-  - 验证方式：文档人工检查
-  - 关联 Commit：更新claude项目文档

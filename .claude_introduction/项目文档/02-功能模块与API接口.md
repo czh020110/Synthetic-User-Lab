@@ -150,7 +150,7 @@
 ```markdown
 {
 "action": "click",
-"target": "button[text='Upload']",
+"payload": {"selector": "button[text='Upload']"},
 "reason": "当前任务要求上传文件，页面存在明确上传按钮"
 }
 ```

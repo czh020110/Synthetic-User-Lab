@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from backend.analysis.validator import validate_progress
 import backend.graph.run_graph as run_graph
 from backend.schemas.run_schemas import (
+    ACTION_REGISTRY,
     ActionInput,
     ActionName,
     ClickActionPayload,
@@ -18,6 +19,7 @@ from backend.schemas.run_schemas import (
     NavigateActionPayload,
     ObservedPageState,
     Persona,
+    PressActionPayload,
     RetrievedContextItem,
     RunRecord,
     RunRequest,
@@ -54,6 +56,8 @@ def make_action(action: ActionName, target: str | None = "#start-demo", value: s
             selector=target if target is not None else "body",
             value=str(value) if value is not None else "test value",
         )
+    elif action == "press":
+        payload = PressActionPayload(key=target if target is not None else "Enter")
     else:
         payload = WaitActionPayload(duration_ms=int(value) if value is not None else 1000)
     return ActionInput(action=action, payload=payload, reason="test")
@@ -1078,3 +1082,106 @@ def test_run_workflow_returns_raw_model_error_in_status_and_report(monkeypatch) 
     assert report.error_message == "HTTP 401 invalid api key"
     assert report.summary == "模型调用错误: HTTP 401 invalid api key"
     assert any("模型调用错误: HTTP 401 invalid api key" == item for item in report.key_findings)
+
+
+# ============================ Action payload 契约回归 ============================ #
+
+
+class TestActionPayloadContract:
+    """覆盖 ActionInput / ACTION_REGISTRY 的 payload shape 正反例。"""
+
+    def test_registry_contains_all_supported_actions(self) -> None:
+        assert set(ACTION_REGISTRY.keys()) == {
+            "navigate", "click", "fill", "wait",
+            "press", "scroll", "upload", "select",
+            "hover", "check", "uncheck", "dblclick",
+            "drag", "ask_for_help", "abandon",
+        }
+
+    def test_navigate_payload_accepts_valid_url(self) -> None:
+        action = ActionInput(action="navigate", payload=NavigateActionPayload(url="https://example.com"), reason="test")
+        assert action.action == "navigate"
+        assert isinstance(action.payload, NavigateActionPayload)
+        assert action.payload.url == "https://example.com"
+
+    def test_navigate_payload_rejects_empty_url(self) -> None:
+        with pytest.raises(ValidationError):
+            NavigateActionPayload(url="")
+
+    def test_click_payload_accepts_valid_selector(self) -> None:
+        action = ActionInput(action="click", payload=ClickActionPayload(selector="#submit"), reason="test")
+        assert action.action == "click"
+        assert isinstance(action.payload, ClickActionPayload)
+        assert action.payload.selector == "#submit"
+
+    def test_click_payload_rejects_empty_selector(self) -> None:
+        with pytest.raises(ValidationError):
+            ClickActionPayload(selector="")
+
+    def test_click_payload_rejects_extra_field(self) -> None:
+        with pytest.raises(ValidationError):
+            ClickActionPayload(**{"selector": "#btn", "value": "unexpected"})
+
+    def test_fill_payload_accepts_selector_and_value(self) -> None:
+        action = ActionInput(action="fill", payload=FillActionPayload(selector="#name", value="Alice"), reason="test")
+        assert isinstance(action.payload, FillActionPayload)
+        assert action.payload.selector == "#name"
+        assert action.payload.value == "Alice"
+
+    def test_fill_payload_rejects_empty_selector(self) -> None:
+        with pytest.raises(ValidationError):
+            FillActionPayload(selector="", value="test")
+
+    def test_fill_payload_rejects_empty_value(self) -> None:
+        with pytest.raises(ValidationError):
+            FillActionPayload(selector="#name", value="")
+
+    def test_fill_payload_rejects_extra_field(self) -> None:
+        with pytest.raises(ValidationError):
+            FillActionPayload(**{"selector": "#name", "value": "test", "duration_ms": 1000})
+
+    def test_wait_payload_defaults_duration_ms(self) -> None:
+        action = ActionInput(action="wait", payload=WaitActionPayload(), reason="test")
+        assert isinstance(action.payload, WaitActionPayload)
+        assert action.payload.duration_ms == 1000
+
+    def test_wait_payload_accepts_custom_duration(self) -> None:
+        action = ActionInput(action="wait", payload=WaitActionPayload(duration_ms=3000), reason="test")
+        assert isinstance(action.payload, WaitActionPayload)
+        assert action.payload.duration_ms == 3000
+
+    def test_wait_payload_rejects_negative_duration(self) -> None:
+        with pytest.raises(ValidationError):
+            WaitActionPayload(duration_ms=-1)
+
+    def test_wait_payload_rejects_extra_field(self) -> None:
+        with pytest.raises(ValidationError):
+            WaitActionPayload(**{"duration_ms": 1000, "value": "unexpected"})
+
+    def test_action_input_normalizes_dict_payload_to_typed_model(self) -> None:
+        action = ActionInput(action="click", payload=cast(Any, {"selector": "#btn"}), reason="test")
+        assert isinstance(action.payload, ClickActionPayload)
+        assert action.payload.selector == "#btn"
+
+    def test_action_input_normalizes_fill_dict_payload(self) -> None:
+        action = ActionInput(action="fill", payload=cast(Any, {"selector": "#name", "value": "Bob"}), reason="test")
+        assert isinstance(action.payload, FillActionPayload)
+        assert action.payload.value == "Bob"
+
+    def test_action_input_rejects_mismatched_payload_type(self) -> None:
+        with pytest.raises(ValidationError):
+            ActionInput(action="click", payload=cast(Any, {"url": "https://example.com"}), reason="test")
+
+    def test_action_input_rejects_unknown_action_name(self) -> None:
+        with pytest.raises(ValidationError):
+            ActionInput(action=cast(Any, "scroll"), payload=cast(Any, {}), reason="test")
+
+    def test_action_input_rejects_extra_top_level_field(self) -> None:
+        raw = {"action": "click", "payload": ClickActionPayload(selector="#btn").model_dump(), "reason": "test", "target": "#btn"}
+        with pytest.raises(ValidationError):
+            ActionInput.model_validate(raw)
+
+    def test_action_input_rejects_old_flat_target_value(self) -> None:
+        raw = {"action": "click", "target": "#btn", "value": "test", "reason": "test"}
+        with pytest.raises(ValidationError):
+            ActionInput.model_validate(raw)

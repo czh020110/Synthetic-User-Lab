@@ -13,7 +13,12 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-ActionName: TypeAlias = Literal["navigate", "click", "fill", "wait"]
+ActionName: TypeAlias = Literal[
+    "navigate", "click", "fill", "wait",
+    "press", "scroll", "upload", "select",
+    "hover", "check", "uncheck", "dblclick",
+    "drag", "ask_for_help", "abandon",
+]
 WaitObservationStatus: TypeAlias = Literal["success", "actionable", "normal_timeout", "abnormal_stuck"]
 WaitObservationDecisionName: TypeAlias = Literal[
     "normal_waiting", "abnormal_stuck", "ready_for_next_action", "task_completed"
@@ -50,7 +55,82 @@ class NavigateActionPayload(BaseModel):
     url: str = Field(..., min_length=1)
 
 
-ActionPayload: TypeAlias = ClickActionPayload | FillActionPayload | WaitActionPayload | NavigateActionPayload
+class PressActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(..., min_length=1)
+
+
+class ScrollActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    direction: Literal["up", "down"] = Field(default="down")
+    amount: int = Field(default=300, ge=0)
+
+
+class UploadActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selector: str = Field(..., min_length=1)
+    file_paths: list[str] = Field(..., min_length=1)
+
+
+class SelectActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selector: str = Field(..., min_length=1)
+    values: list[str] = Field(..., min_length=1)
+
+
+class HoverActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selector: str = Field(..., min_length=1)
+
+
+class CheckActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selector: str = Field(..., min_length=1)
+
+
+class UncheckActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selector: str = Field(..., min_length=1)
+
+
+class DblclickActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selector: str = Field(..., min_length=1)
+
+
+class DragActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start_selector: str = Field(..., min_length=1)
+    end_selector: str = Field(..., min_length=1)
+
+
+class AskForHelpPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(..., min_length=1)
+
+
+class AbandonPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(..., min_length=1)
+
+
+ActionPayload: TypeAlias = (
+    ClickActionPayload | FillActionPayload | WaitActionPayload | NavigateActionPayload
+    | PressActionPayload | ScrollActionPayload | UploadActionPayload | SelectActionPayload
+    | HoverActionPayload | CheckActionPayload | UncheckActionPayload | DblclickActionPayload
+    | DragActionPayload | AskForHelpPayload | AbandonPayload
+)
 
 
 @dataclass(frozen=True)
@@ -85,6 +165,72 @@ ACTION_REGISTRY: dict[ActionName, ActionDefinition] = {
         description="等待页面状态变化。",
         payload_model=WaitActionPayload,
         payload_description='payload 必须为 {"duration_ms": 等待毫秒数}，没有明确时使用 1000',
+    ),
+    "press": ActionDefinition(
+        name="press",
+        description="按下键盘按键，如 Enter 提交、Tab 切换焦点、Escape 关闭弹窗。",
+        payload_model=PressActionPayload,
+        payload_description='payload 必须为 {"key": "按键名"}，如 "Enter"、"Tab"、"Escape"、"ArrowDown"',
+    ),
+    "scroll": ActionDefinition(
+        name="scroll",
+        description="在页面上滚动以查看更多内容。",
+        payload_model=ScrollActionPayload,
+        payload_description='payload 必须为 {"direction": "up 或 down", "amount": 像素数}，amount 默认 300',
+    ),
+    "upload": ActionDefinition(
+        name="upload",
+        description="上传文件到页面的文件输入框。",
+        payload_model=UploadActionPayload,
+        payload_description='payload 必须为 {"selector": "CSS 选择器", "file_paths": ["文件路径"]}',
+    ),
+    "select": ActionDefinition(
+        name="select",
+        description="在下拉框中选择选项。",
+        payload_model=SelectActionPayload,
+        payload_description='payload 必须为 {"selector": "CSS 选择器", "values": ["选项值"]}',
+    ),
+    "hover": ActionDefinition(
+        name="hover",
+        description="鼠标悬停在元素上以触发菜单、提示或子菜单。",
+        payload_model=HoverActionPayload,
+        payload_description='payload 必须为 {"selector": "CSS 选择器"}',
+    ),
+    "check": ActionDefinition(
+        name="check",
+        description="勾选复选框或单选按钮。",
+        payload_model=CheckActionPayload,
+        payload_description='payload 必须为 {"selector": "CSS 选择器"}',
+    ),
+    "uncheck": ActionDefinition(
+        name="uncheck",
+        description="取消勾选复选框。",
+        payload_model=UncheckActionPayload,
+        payload_description='payload 必须为 {"selector": "CSS 选择器"}',
+    ),
+    "dblclick": ActionDefinition(
+        name="dblclick",
+        description="双击元素。",
+        payload_model=DblclickActionPayload,
+        payload_description='payload 必须为 {"selector": "CSS 选择器"}',
+    ),
+    "drag": ActionDefinition(
+        name="drag",
+        description="将元素从起点拖拽到终点。",
+        payload_model=DragActionPayload,
+        payload_description='payload 必须为 {"start_selector": "起点 CSS 选择器", "end_selector": "终点 CSS 选择器"}',
+    ),
+    "ask_for_help": ActionDefinition(
+        name="ask_for_help",
+        description="用户卡住时请求帮助，表示当前流程无法继续。执行后 run 将以需要帮助状态终止。",
+        payload_model=AskForHelpPayload,
+        payload_description='payload 必须为 {"message": "求助说明"}',
+    ),
+    "abandon": ActionDefinition(
+        name="abandon",
+        description="用户放弃当前任务。执行后 run 将以放弃状态终止。",
+        payload_model=AbandonPayload,
+        payload_description='payload 必须为 {"reason": "放弃原因"}',
     ),
 }
 

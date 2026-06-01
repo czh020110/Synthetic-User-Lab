@@ -76,3 +76,7 @@
 ## 技术接口规范
 
 LangChain 与 LangGraph 接口规范: @../.claude_introduction/LangChain与LangGraph接口规范.md
+
+## 修改检查
+
+代码修改完之后必须使用Pyright检查是否有错误. 优先使用codegraph来查询项目代码

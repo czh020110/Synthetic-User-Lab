@@ -47,7 +47,12 @@ def build_demo_task(app_base_url: str) -> Task:
             "表单已隐藏",
         ],
         max_steps=settings.run_step_limit,
-        allowed_actions=["navigate", "click", "fill", "wait"],
+        allowed_actions=[
+            "navigate", "click", "fill", "wait",
+            "press", "scroll", "upload", "select",
+            "hover", "check", "uncheck", "dblclick",
+            "drag", "ask_for_help", "abandon",
+        ],
         risk_level="low",
         destructive_action_allowed=False,
     )

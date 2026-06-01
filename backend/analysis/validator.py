@@ -178,9 +178,10 @@ def _count_consecutive_waits(previous_steps: list[StepLog], current_action: Acti
 
 
 def _count_consecutive_action_target(previous_steps: list[StepLog], current_action: ActionInput | None) -> int:
-    """统计连续执行相同 click 或 navigate 目标的步数。"""
+    """统计连续执行相同动作目标（含 payload 签名）的步数。"""
 
-    if current_action is None or current_action.action not in {"click", "navigate"}:
+    non_progress_actions = {"wait", "ask_for_help", "abandon"}
+    if current_action is None or current_action.action in non_progress_actions:
         return 0
 
     streak = 1
@@ -242,9 +243,10 @@ def _is_task_start_page(start_url: str, current_url: str) -> bool:
 
 
 def _action_can_stall(current_action: ActionInput | None) -> bool:
-    """判断当前动作是否适合参与页面停滞判定。"""
+    """判断当前动作是否适合参与页面停滞判定。填写/勾选类动作不标记停滞。"""
 
-    return current_action is None or current_action.action != "fill"
+    form_actions = {"fill", "check", "uncheck", "select", "upload", "ask_for_help", "abandon"}
+    return current_action is None or current_action.action not in form_actions
 
 
 def _page_fingerprint(page_state: ObservedPageState) -> tuple[str, str]:
