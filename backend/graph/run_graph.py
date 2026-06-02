@@ -36,6 +36,7 @@ from backend.prompt.graph import (
     wait_observe_input,
 )
 from backend.retrieval.minimal_context import render_retrieval_context
+from backend.retrieval.failure_recovery import choose_recovery_action
 from backend.schemas.run_schemas import (
     ActionInput,
     NavigateActionPayload,
@@ -600,22 +601,36 @@ def route_after_log(state: RunState) -> str:
 
 # 更新graph state 确定恢复动作,交给execute_action节点执行
 async def prepare_recovery_action(state: RunState) -> dict:
-    """构造最小受控恢复动作。"""
+    """根据摩擦信号与恢复历史，动态选择受控恢复动作。"""
 
     task = state.get("task")
-    page_state = state.get("current_page_state")  # 当前页面快照,暂存恢复前状态
+    page_state = state.get("current_page_state")
+    validation = state.get("current_validation_result")
     if task is None or page_state is None:
         raise ValueError("Task or page state is missing before recovery action.")
 
+    friction_signals = list(validation.friction_signals) if validation is not None else []
+    step_logs = state.get("step_logs", [])
+    recovery_history = state.get("recovery_history") or []
+
+    recovery_action = choose_recovery_action(
+        task=task,
+        friction_signals=friction_signals,
+        step_logs=step_logs,
+        recovery_history=recovery_history,
+    )
+
+    new_history_entry = {
+        "error_pattern": friction_signals[0] if friction_signals else "unknown",
+        "action": recovery_action.action,
+        "reason": recovery_action.reason,
+    }
+
     return {
-        "current_action": ActionInput(
-            action="navigate",
-            payload=NavigateActionPayload(url=task.start_url),
-            reason="页面卡住或偏离后，回到任务起始页重新进入主流程。",
-        ),
+        "current_action": recovery_action,
         "current_page_state": page_state,
         "recovery_attempted": True,
-        # 清空残留状态
+        "recovery_history": [*recovery_history, new_history_entry],
         "wait_observation_status": None,
         "wait_observation_reason": None,
         "wait_observation_observations": None,

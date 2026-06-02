@@ -57,6 +57,7 @@ class RunState(TypedDict):
     wait_observation_round: NotRequired[int | None]
     retrieval_context: NotRequired[list[RetrievedContextItem]]
     recovery_attempted: NotRequired[bool]
+    recovery_history: NotRequired[list[dict]]
     wait_agent: NotRequired[Any]
     decide_agent: NotRequired[Any]
     validate_agent: NotRequired[Any]
