@@ -52,8 +52,7 @@ screenshots/
 
 .claude/settings.local.json
 .claude/.cache/
-.codegraph/.claude/
-.claude_introduction/
+.codegraph/
 
 .claude/
 .claude_introduction/

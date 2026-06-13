@@ -35,6 +35,8 @@ def _make_fake_page() -> AsyncMock:
     locator.set_input_files = AsyncMock()
     locator.select_option = AsyncMock()
     locator.drag_to = AsyncMock()
+    locator.focus = AsyncMock()
+    locator.evaluate = AsyncMock()
     page.locator = MagicMock(return_value=locator)
     page.goto = AsyncMock()
     page.keyboard = AsyncMock()
@@ -207,3 +209,78 @@ def test_terminal_actions_contains_ask_for_help_and_abandon() -> None:
     assert "ask_for_help" in TERMINAL_ACTIONS
     assert "abandon" in TERMINAL_ACTIONS
     assert "navigate" not in TERMINAL_ACTIONS
+
+
+# ============================ scroll with selector ============================ #
+
+
+@pytest.mark.asyncio
+async def test_execute_scroll_with_selector_calls_evaluate() -> None:
+    page = _make_fake_page()
+    action = ActionInput(action="scroll", payload=ScrollActionPayload(selector="#scroll-box", direction="down", amount=300), reason="test")
+    result = await execute_action(page, action)
+    assert result.success is True
+    page.locator.assert_called_once_with("#scroll-box")
+    page.locator.return_value.evaluate.assert_awaited_once()
+    page.mouse.wheel.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_execute_scroll_without_selector_calls_mouse_wheel() -> None:
+    page = _make_fake_page()
+    action = ActionInput(action="scroll", payload=ScrollActionPayload(direction="down", amount=500), reason="test")
+    result = await execute_action(page, action)
+    assert result.success is True
+    page.mouse.wheel.assert_awaited_once_with(0, 500)
+    page.locator.assert_not_called()
+
+
+# ============================ press with selector ============================ #
+
+
+@pytest.mark.asyncio
+async def test_execute_press_with_selector_focuses_then_presses() -> None:
+    page = _make_fake_page()
+    action = ActionInput(action="press", payload=PressActionPayload(selector="#press-input", key="Enter"), reason="test")
+    result = await execute_action(page, action)
+    assert result.success is True
+    page.locator.assert_called_once_with("#press-input")
+    page.locator.return_value.focus.assert_awaited_once()
+    page.keyboard.press.assert_awaited_once_with("Enter")
+
+
+@pytest.mark.asyncio
+async def test_execute_press_without_selector_just_presses() -> None:
+    page = _make_fake_page()
+    action = ActionInput(action="press", payload=PressActionPayload(key="Enter"), reason="test")
+    result = await execute_action(page, action)
+    assert result.success is True
+    page.keyboard.press.assert_awaited_once_with("Enter")
+    page.locator.assert_not_called()
+
+
+# ============================ upload with content ============================ #
+
+
+@pytest.mark.asyncio
+async def test_execute_upload_with_content_creates_temp_file() -> None:
+    page = _make_fake_page()
+    action = ActionInput(action="upload", payload=UploadActionPayload(selector="#file-input", content="hello world", filename="test.txt"), reason="test")
+    result = await execute_action(page, action)
+    assert result.success is True
+    page.locator.assert_called_once_with("#file-input")
+    set_input_files_call = page.locator.return_value.set_input_files.call_args
+    uploaded_path = set_input_files_call[0][0]
+    assert uploaded_path.endswith("test.txt")
+    import os
+    assert not os.path.exists(uploaded_path)
+
+
+@pytest.mark.asyncio
+async def test_execute_upload_with_file_paths_uses_original_logic() -> None:
+    page = _make_fake_page()
+    action = ActionInput(action="upload", payload=UploadActionPayload(selector="#file-input", file_paths=["/tmp/test.pdf"]), reason="test")
+    result = await execute_action(page, action)
+    assert result.success is True
+    page.locator.assert_called_once_with("#file-input")
+    page.locator.return_value.set_input_files.assert_awaited_once_with(["/tmp/test.pdf"])

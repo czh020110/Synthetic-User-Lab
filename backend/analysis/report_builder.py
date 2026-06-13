@@ -13,8 +13,9 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import SecretStr
 
 from backend.ai_api.provider_router import get_model_router
+from backend.analysis.friction_analyzer import analyze_friction
 from backend.prompt.report import RECOMMENDATION_SYSTEM_PROMPT
-from backend.schemas.run_schemas import ReportConclusion, RunRecord, RunReport, StepLog
+from backend.schemas.run_schemas import FrictionIssue, ReportConclusion, RunRecord, RunReport, StepLog
 
 RECOMMENDATION_LIMIT = 10
 CONCLUSION_SEVERITY_ORDER: dict[ReportConclusion, int] = {
@@ -58,6 +59,7 @@ def _build_run_report_sync(
     allow_detailed_report: bool = True,
 ) -> RunReport:
     success, last_progress_summary, friction_signals, conclusion, key_findings = _build_report_base(record, steps)
+    friction_issues = analyze_friction(steps)
 
     generated_key_findings: list[str] = []
     recommendations: list[str] = []
@@ -69,6 +71,7 @@ def _build_run_report_sync(
             friction_signals=friction_signals,
             last_progress_summary=last_progress_summary,
             fallback_conclusion=conclusion,
+            friction_issues=friction_issues,
         )
         conclusion = _merge_conclusion(conclusion, analysis.get("conclusion"))
         generated_key_findings = _dedupe_text_items(analysis.get("key_findings", []))
@@ -83,11 +86,13 @@ def _build_run_report_sync(
         conclusion=conclusion,
         key_findings=[*key_findings, *generated_key_findings],
         recommendations=recommendations,
+        friction_issues=friction_issues,
     )
 
 
 async def _build_run_report_async(record: RunRecord, steps: list[StepLog]) -> RunReport:
     success, last_progress_summary, friction_signals, conclusion, key_findings = _build_report_base(record, steps)
+    friction_issues = analyze_friction(steps)
 
     generated_key_findings: list[str] = []
     recommendations: list[str] = []
@@ -99,6 +104,7 @@ async def _build_run_report_async(record: RunRecord, steps: list[StepLog]) -> Ru
             friction_signals=friction_signals,
             last_progress_summary=last_progress_summary,
             fallback_conclusion=conclusion,
+            friction_issues=friction_issues,
         )
         conclusion = _merge_conclusion(conclusion, analysis.get("conclusion"))
         generated_key_findings = _dedupe_text_items(analysis.get("key_findings", []))
@@ -113,6 +119,7 @@ async def _build_run_report_async(record: RunRecord, steps: list[StepLog]) -> Ru
         conclusion=conclusion,
         key_findings=[*key_findings, *generated_key_findings],
         recommendations=recommendations,
+        friction_issues=friction_issues,
     )
 
 
@@ -126,6 +133,7 @@ def _build_report_model(
     conclusion: ReportConclusion,
     key_findings: list[str],
     recommendations: list[str],
+    friction_issues: list[FrictionIssue],
 ) -> RunReport:
     return RunReport(
         run_id=record.run_id,
@@ -137,6 +145,7 @@ def _build_report_model(
         task=record.task,
         total_steps=len(steps),
         friction_signals=friction_signals,
+        friction_issues=friction_issues,
         key_findings=_dedupe_text_items(key_findings),
         next_recommendations=recommendations,
         step_details=[_serialize_step(step) for step in steps],
@@ -276,6 +285,7 @@ def _build_recommendation_messages(
     friction_signals: list[str],
     last_progress_summary: str,
     fallback_conclusion: ReportConclusion,
+    friction_issues: list[FrictionIssue],
 ) -> list[Any]:
     prompt_payload = _build_recommendation_payload(
         record,
@@ -284,6 +294,7 @@ def _build_recommendation_messages(
         friction_signals,
         last_progress_summary,
         fallback_conclusion,
+        friction_issues=friction_issues,
     )
     return [
         SystemMessage(content=RECOMMENDATION_SYSTEM_PROMPT),
@@ -298,6 +309,7 @@ def _generate_report_analysis(
     friction_signals: list[str],
     last_progress_summary: str,
     fallback_conclusion: ReportConclusion,
+    friction_issues: list[FrictionIssue],
 ) -> dict[str, Any]:
     llm = _build_recommendation_llm()
     if llm is None:
@@ -310,6 +322,7 @@ def _generate_report_analysis(
         friction_signals,
         last_progress_summary,
         fallback_conclusion,
+        friction_issues=friction_issues,
     )
 
     try:
@@ -328,6 +341,7 @@ async def _generate_report_analysis_async(
     friction_signals: list[str],
     last_progress_summary: str,
     fallback_conclusion: ReportConclusion,
+    friction_issues: list[FrictionIssue],
 ) -> dict[str, Any]:
     llm = _build_recommendation_llm()
     if llm is None:
@@ -340,6 +354,7 @@ async def _generate_report_analysis_async(
         friction_signals,
         last_progress_summary,
         fallback_conclusion,
+        friction_issues=friction_issues,
     )
 
     try:
@@ -387,6 +402,7 @@ def _build_recommendation_payload(
     friction_signals: list[str],
     last_progress_summary: str,
     fallback_conclusion: ReportConclusion,
+    friction_issues: list[FrictionIssue],
 ) -> dict[str, Any]:
     return {
         "run": {
@@ -418,6 +434,7 @@ def _build_recommendation_payload(
         },
         "signals": {
             "friction_signals": friction_signals,
+            "friction_issues": [issue.model_dump(mode="json") for issue in friction_issues],
             "last_progress_summary": last_progress_summary,
             "problem_summary": _summarize_problem_pattern(steps),
             "fallback_conclusion": fallback_conclusion,

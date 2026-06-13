@@ -1,98 +1,505 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Synthetic User Lab Demo</title>
-  <style>
-    body { font-family: Arial, sans-serif; max-width: 720px; margin: 40px auto; line-height: 1.6; }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 24px; margin-bottom: 16px; }
-    .hidden { display: none; }
-    .success-message { color: #0a7a30; font-weight: bold; }
-    .error-message { color: #b42318; }
-    .spinner {
-      width: 40px;
-      height: 40px;
-      margin: 16px 0;
-      border: 4px solid #d0d5dd;
-      border-top-color: #2e90fa;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    .status-message { font-weight: 600; }
-    .loading-message { color: #6941c6; }
-    label { display: block; margin-top: 12px; }
-    input { width: 100%; padding: 8px; margin-top: 4px; }
-    button { margin-top: 16px; padding: 10px 16px; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Synthetic User Lab - 动作验证 Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
+  header { background: #2563eb; color: #fff; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header .nav-links a { color: #bfdbfe; text-decoration: none; margin-left: 16px; font-size: 14px; }
+  header .nav-links a:hover { color: #fff; }
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+  section { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  section h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #1e40af; border-bottom: 2px solid #dbeafe; padding-bottom: 8px; }
+  label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 4px; color: #374151; }
+  input[type="text"], input[type="email"], input[type="password"], input[type="number"], textarea, select {
+    width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; margin-bottom: 12px;
+    transition: border-color .2s;
+  }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+  .btn { display: inline-block; padding: 8px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all .15s; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-danger { background: #dc2626; color: #fff; }
+  .btn-danger:hover { background: #b91c1c; }
+  .btn-secondary { background: #6b7280; color: #fff; }
+  .btn-secondary:hover { background: #4b5563; }
+  .btn-success { background: #059669; color: #fff; }
+  .btn-success:hover { background: #047857; }
+  .btn-outline { background: #fff; color: #2563eb; border: 1px solid #2563eb; }
+  .btn-outline:hover { background: #eff6ff; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 200px; }
+  .msg-box { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-top: 8px; display: none; }
+  .msg-box.success { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  .msg-box.error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+  .msg-box.info { display: block; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+  .counter { font-size: 28px; font-weight: 700; color: #2563eb; }
+  .progress-bar { width: 100%; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  .progress-bar .fill { height: 100%; background: #2563eb; border-radius: 4px; transition: width .3s; width: 0%; }
+  .tabs { display: flex; border-bottom: 2px solid #e5e7eb; margin-bottom: 16px; }
+  .tab { padding: 8px 16px; cursor: pointer; font-size: 14px; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .tab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 500; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: #fff; border-radius: 12px; padding: 24px; width: 400px; max-width: 90vw; }
+  .modal h3 { margin-bottom: 12px; }
+  .tooltip-trigger { position: relative; cursor: help; border-bottom: 1px dashed #9ca3af; }
+  .tooltip-trigger:hover::after { content: attr(data-tip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #1f2937; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #e5e7eb; }
+  th { background: #f9fafb; font-weight: 600; color: #374151; }
+  .drag-zone { border: 2px dashed #d1d5db; border-radius: 8px; padding: 32px; text-align: center; color: #9ca3af; transition: all .2s; }
+  .drag-zone.dragover { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+  .scroll-area { max-height: 200px; overflow-y: auto; border: 1px solid #d1d5db; border-radius: 6px; padding: 12px; }
+  #section-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  #section-nav a { padding: 4px 12px; background: #eff6ff; color: #1e40af; border-radius: 20px; font-size: 13px; text-decoration: none; }
+  #section-nav a:hover { background: #dbeafe; }
+  .hidden { display: none !important; }
+  .card { background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); border: 2px solid #059669; }
+  .card .success-message { font-size: 18px; font-weight: 600; color: #059669; }
+  .drag-item { padding: 10px 16px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; cursor: grab; font-size: 14px; user-select: none; }
+  .drag-item:active { cursor: grabbing; }
+  .drop-target { min-height: 80px; border: 2px dashed #d1d5db; border-radius: 8px; padding: 16px; transition: all .2s; display: flex; align-items: center; justify-content: center; color: #9ca3af; }
+  .drop-target.drag-over { border-color: #2563eb; background: #eff6ff; color: #2563eb; }
+  .drop-target.has-item { border-style: solid; border-color: #059669; background: #ecfdf5; color: #065f46; }
+</style>
 </head>
 <body>
-  <main>
-    <section id="intro-card" class="card">
-      <h1>Synthetic User Lab Demo</h1>
-      <p>这是一个用于验证最小 Run 闭环模块的内置页面。</p>
-      <button id="start-demo" type="button">开始体验</button>
-    </section>
 
-    <section id="form-card" class="card hidden">
-      <h2>提交体验表单</h2>
-      <p>请填写用户名和邮箱，完成本次 demo 任务。</p>
-      <label for="user-name">用户名</label>
-      <input id="user-name" name="user_name" type="text" placeholder="请输入用户名" />
-      <label for="user-email">邮箱</label>
-      <input id="user-email" name="user_email" type="email" placeholder="请输入邮箱" />
-      <button id="submit-demo" type="button">提交体验表单</button>
-      <p id="form-error" class="error-message hidden" role="alert">请先完整填写所有字段。</p>
-    </section>
+<header>
+  <h1>Synthetic User Lab - Demo</h1>
+  <div class="nav-links">
+    <a href="#s-click">click</a>
+    <a href="#s-fill">fill</a>
+    <a href="#s-check">check/uncheck</a>
+    <a href="#s-select">select</a>
+    <a href="#s-press">press</a>
+    <a href="#s-navigate">navigate</a>
+    <a href="#s-scroll">scroll</a>
+    <a href="#s-wait">wait</a>
+    <a href="#s-upload">upload</a>
+    <a href="#s-hover">hover</a>
+    <a href="#s-dblclick">dblclick</a>
+    <a href="#s-drag">drag</a>
+    <a href="#s-ask">ask</a>
+    <a href="#s-abandon">abandon</a>
+  </div>
+</header>
 
-    <section id="loading-card" class="card hidden" role="status" aria-live="polite">
-      <h2>正在注册</h2>
-      <div class="spinner" aria-hidden="true"></div>
-      <p class="status-message loading-message">正在注册，请稍候...</p>
-    </section>
+<div class="container">
 
-    <section id="success-card" class="card hidden">
-      <h2>提交成功</h2>
-      <p class="success-message">提交成功</p>
-      <p>你已经完成 Synthetic User Lab 的最小 demo 任务。</p>
-    </section>
-  </main>
+<div id="section-nav">
+  <a href="#s-click">click</a>
+  <a href="#s-fill">fill</a>
+  <a href="#s-check">check/uncheck</a>
+  <a href="#s-select">select</a>
+  <a href="#s-press">press</a>
+  <a href="#s-navigate">navigate</a>
+  <a href="#s-scroll">scroll</a>
+  <a href="#s-wait">wait</a>
+  <a href="#s-upload">upload</a>
+  <a href="#s-hover">hover</a>
+  <a href="#s-dblclick">dblclick</a>
+  <a href="#s-drag">drag</a>
+  <a href="#s-ask">ask</a>
+  <a href="#s-abandon">abandon</a>
+</div>
 
-  <script>
-    const introCard = document.getElementById('intro-card');
-    const formCard = document.getElementById('form-card');
-    const loadingCard = document.getElementById('loading-card');
-    const successCard = document.getElementById('success-card');
-    const errorText = document.getElementById('form-error');
-    const nameInput = document.getElementById('user-name');
-    const emailInput = document.getElementById('user-email');
+<!-- ========== click ========== -->
+<section id="s-click">
+  <h2>click — 点击按钮/链接</h2>
+  <div class="row">
+    <div>
+      <p>点击计数器：</p>
+      <p class="counter" id="click-count">0</p>
+      <button class="btn btn-primary" id="btn-increment" data-testid="btn-increment">+1</button>
+      <button class="btn btn-secondary" id="btn-reset">重置</button>
+    </div>
+    <div>
+      <p style="margin-top:12px">
+        <button class="btn btn-danger" id="btn-delete" data-testid="btn-delete">删除项目</button>
+      </p>
+      <div class="msg-box error" id="delete-msg">删除确认弹窗未实现（安全边界）</div>
+    </div>
+  </div>
+</section>
 
-    document.getElementById('start-demo').addEventListener('click', () => {
-      introCard.classList.add('hidden');
-      formCard.classList.remove('hidden');
-    });
+<!-- ========== fill ========== -->
+<section id="s-fill">
+  <h2>fill — 输入文本</h2>
+  <div class="row">
+    <div>
+      <label for="fill-name">姓名</label>
+      <input type="text" id="fill-name" placeholder="请输入姓名" data-testid="fill-name"/>
+    </div>
+    <div>
+      <label for="fill-email">邮箱</label>
+      <input type="email" id="fill-email" placeholder="请输入邮箱" data-testid="fill-email"/>
+    </div>
+    <div>
+      <label for="fill-pwd">密码</label>
+      <input type="password" id="fill-pwd" placeholder="请输入密码" data-testid="fill-pwd"/>
+    </div>
+  </div>
+  <label for="fill-bio">个人简介</label>
+  <textarea id="fill-bio" rows="3" placeholder="请输入个人简介" data-testid="fill-bio"></textarea>
+  <button class="btn btn-primary" id="btn-submit-form" data-testid="btn-submit-form">提交表单</button>
+  <div class="msg-box" id="form-msg">表单提交成功！</div>
+</section>
 
-    document.getElementById('submit-demo').addEventListener('click', () => {
-      const hasName = nameInput.value.trim().length > 0;
-      const hasEmail = emailInput.value.trim().length > 0;
+<!-- ========== check / uncheck ========== -->
+<section id="s-check">
+  <h2>check / uncheck — 勾选与取消勾选</h2>
+  <div class="row">
+    <div>
+      <p>订阅选项（check/uncheck 独立测试）：</p>
+      <label><input type="checkbox" id="cb-newsletter" data-testid="cb-newsletter" checked/> 订阅新闻邮件</label>
+      <div class="msg-box info" id="check-msg">当前状态：已订阅新闻邮件</div>
+    </div>
+    <div>
+      <p>其他复选框：</p>
+      <label><input type="checkbox" id="cb-agree" data-testid="cb-agree"/> 同意条款</label>
+      <div class="msg-box info" id="cb-msg">已同意条款</div>
+    </div>
+  </div>
+</section>
 
-      if (!hasName || !hasEmail) {
-        errorText.classList.remove('hidden');
-        return;
-      }
+<!-- ========== select ========== -->
+<section id="s-select">
+  <h2>select — 下拉选择</h2>
+  <div class="row">
+    <div>
+      <label for="sel-city">城市</label>
+      <select id="sel-city" data-testid="sel-city">
+        <option value="">请选择</option>
+        <option value="beijing">北京</option>
+        <option value="shanghai">上海</option>
+        <option value="guangzhou">广州</option>
+        <option value="shenzhen">深圳</option>
+      </select>
+    </div>
+    <div>
+      <label for="sel-lang">编程语言（多选）</label>
+      <select id="sel-lang" multiple data-testid="sel-lang" style="height:100px">
+        <option value="python">Python</option>
+        <option value="js">JavaScript</option>
+        <option value="go">Go</option>
+        <option value="rust">Rust</option>
+      </select>
+    </div>
+  </div>
+  <div class="msg-box info" id="sel-msg"></div>
+</section>
 
-      errorText.classList.add('hidden');
-      formCard.classList.add('hidden');
-      loadingCard.classList.remove('hidden');
+<!-- ========== press ========== -->
+<section id="s-press">
+  <h2>press — 键盘按键</h2>
+  <p>在下方输入框中按键，按键名称会实时显示：</p>
+  <input type="text" id="press-input" placeholder="在此输入并按键…" data-testid="press-input" style="margin-bottom:4px"/>
+  <div id="press-log" style="font-family:monospace;font-size:13px;color:#6b7280;min-height:20px">等待按键…</div>
+  <p style="margin-top:12px;font-size:13px;color:#9ca3af">提示：按 Enter 提交、Escape 关闭弹窗、Tab 切换焦点、ArrowDown 展开下拉</p>
+</section>
 
-      window.setTimeout(() => {
-        loadingCard.classList.add('hidden');
-        successCard.classList.remove('hidden');
-      }, 30000);
-    });
-  </script>
+<!-- ========== navigate ========== -->
+<section id="s-navigate">
+  <h2>navigate — 页面导航</h2>
+  <p>以下按钮使用 navigate 动作跳转到不同的真实 URL 页面：</p>
+  <div class="row" style="margin-top:12px">
+    <div>
+      <a href="step2.html" class="btn btn-outline" id="nav-step2" data-testid="nav-step2">前往 Step 2 (step2.html)</a>
+      <a href="step3.html" class="btn btn-outline" id="nav-step3" data-testid="nav-step3">前往 Step 3 (step3.html)</a>
+    </div>
+  </div>
+  <p style="margin-top:8px;font-size:13px;color:#9ca3af">提示：navigate 动作传入 url="/demo/step2.html" 或 url="/demo/step3.html" 即可跳转到对应页面</p>
+</section>
+
+<!-- ========== scroll ========== -->
+<section id="s-scroll">
+  <h2>scroll — 滚动页面/元素</h2>
+  <div class="scroll-area" id="scroll-box" data-testid="scroll-box">
+    <p><strong>可滚动区域</strong> — 滚动到底部可看到隐藏内容：</p>
+    <p style="margin-top:8px">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+    <p style="margin-top:8px">Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+    <p style="margin-top:8px">Curabitur pretium tincidunt lacus. Nulla gravida orci a odio. Nullam varius, turpis et commodo pharetra.</p>
+    <p style="margin-top:16px;color:#059669;font-weight:600" id="scroll-hidden" data-testid="scroll-hidden">已滚动到底部！验证 scroll 动作成功。</p>
+  </div>
+  <p style="margin-top:8px;font-size:13px;color:#9ca3af">提示：scroll 动作可传入 selector="#scroll-box" + direction="down" + amount=300</p>
+</section>
+
+<!-- ========== wait ========== -->
+<section id="s-wait">
+  <h2>wait — 等待元素/条件</h2>
+  <button class="btn btn-primary" id="btn-wait-start" data-testid="btn-wait-start">开始异步任务（3秒后完成）</button>
+  <div class="progress-bar" style="margin-top:12px"><div class="fill" id="wait-progress"></div></div>
+  <div class="msg-box" id="wait-msg">异步任务完成！</div>
+  <p style="margin-top:8px;font-size:13px;color:#9ca3af">提示：wait 动作可等待 #wait-msg 变为可见，或等待 #btn-wait-done 出现</p>
+</section>
+
+<!-- ========== upload ========== -->
+<section id="s-upload">
+  <h2>upload — 文件上传</h2>
+  <div class="drag-zone" id="drop-zone" data-testid="drop-zone">
+    拖拽文件到此处，或点击下方按钮选择文件
+  </div>
+  <input type="file" id="file-input" data-testid="file-input" style="margin-top:8px" multiple/>
+  <div class="msg-box info" id="upload-msg"></div>
+</section>
+
+<!-- ========== hover ========== -->
+<section id="s-hover">
+  <h2>hover — 悬停触发</h2>
+  <div style="display:inline-block;position:relative">
+    <button class="btn btn-outline" id="btn-hover" data-testid="btn-hover">悬停我</button>
+    <div id="hover-tooltip" style="display:none;position:absolute;top:100%;left:0;background:#1f2937;color:#fff;padding:8px 12px;border-radius:6px;font-size:13px;margin-top:4px;white-space:nowrap;z-index:10" data-testid="hover-tooltip">悬停提示：你触发了 hover 动作！</div>
+  </div>
+  <div class="msg-box info" id="hover-msg">检测到 hover 事件</div>
+</section>
+
+<!-- ========== dblclick ========== -->
+<section id="s-dblclick">
+  <h2>dblclick — 双击触发</h2>
+  <p>双击下方按钮切换文字颜色，单击不会触发：</p>
+  <button class="btn btn-outline" id="btn-dblclick" data-testid="btn-dblclick" style="font-size:16px;padding:12px 24px">双击我</button>
+  <p id="dblclick-text" data-testid="dblclick-text" style="margin-top:12px;font-size:18px;font-weight:600;color:#6b7280">等待双击…</p>
+  <div class="msg-box info" id="dblclick-msg">双击事件已触发！</div>
+  <p style="margin-top:8px;font-size:13px;color:#9ca3af">提示：dblclick 动作传入 selector="#btn-dblclick"，双击后 #dblclick-text 文字变为蓝色</p>
+</section>
+
+<!-- ========== drag ========== -->
+<section id="s-drag">
+  <h2>drag — 拖拽元素</h2>
+  <p>将下方色块拖拽到右侧放置区：</p>
+  <div class="row" style="margin-top:12px;align-items:flex-start">
+    <div>
+      <p style="font-size:13px;color:#6b7280;margin-bottom:8px">拖拽源：</p>
+      <div class="drag-item" id="drag-source" data-testid="drag-source" draggable="true">📦 拖拽我</div>
+    </div>
+    <div>
+      <p style="font-size:13px;color:#6b7280;margin-bottom:8px">放置目标：</p>
+      <div class="drop-target" id="drop-target" data-testid="drop-target">拖拽到此处</div>
+    </div>
+  </div>
+  <div class="msg-box info" id="drag-msg">拖拽成功！元素已放入目标区域。</div>
+  <p style="margin-top:8px;font-size:13px;color:#9ca3af">提示：drag 动作传入 start_selector="#drag-source" + end_selector="#drop-target"</p>
+</section>
+
+<!-- ========== ask_for_help ========== -->
+<section id="s-ask">
+  <h2>ask_for_help — 请求帮助</h2>
+  <p>当合成用户无法自行决定下一步时，可以请求帮助。模拟场景：</p>
+  <button class="btn btn-outline" id="btn-ask-help" data-testid="btn-ask-help">我不知道该怎么做</button>
+  <div class="msg-box info" id="ask-msg">已发出帮助请求，等待人工介入或系统指导。</div>
+</section>
+
+<!-- ========== abandon ========== -->
+<section id="s-abandon">
+  <h2>abandon — 放弃任务</h2>
+  <p>当所有恢复路径耗尽时，合成用户放弃任务。模拟场景：</p>
+  <p style="margin-top:8px;font-size:13px;color:#9ca3af">此动作不需要页面交互元素，由系统在恢复路径耗尽时自动触发。</p>
+  <button class="btn btn-danger" id="btn-abandon" data-testid="btn-abandon">放弃当前任务</button>
+  <div class="msg-box error" id="abandon-msg">任务已放弃。原因：所有恢复动作均已尝试且无效。</div>
+</section>
+
+<!-- ========== 任务完成标志 ========== -->
+<section id="success-card" class="card hidden" data-testid="success-card">
+  <h2>任务完成</h2>
+  <p class="success-message" id="success-msg">所有动作验证已完成！</p>
+  <p>你已经成功验证了 Synthetic User Lab 的全部受控动作。</p>
+</section>
+
+</div>
+<div class="modal-overlay" id="modal-overlay" data-testid="modal-overlay">
+  <div class="modal">
+    <h3>确认操作</h3>
+    <p>你确定要执行此操作吗？按 <kbd>Escape</kbd> 关闭此弹窗。</p>
+    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-secondary" id="modal-cancel">取消</button>
+      <button class="btn btn-primary" id="modal-confirm">确认</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== click =====
+let count = 0;
+document.getElementById('btn-increment').addEventListener('click', () => {
+  count++;
+  document.getElementById('click-count').textContent = count;
+});
+document.getElementById('btn-reset').addEventListener('click', () => {
+  count = 0;
+  document.getElementById('click-count').textContent = '0';
+});
+document.getElementById('btn-delete').addEventListener('click', () => {
+  document.getElementById('modal-overlay').classList.add('show');
+});
+document.getElementById('modal-cancel').addEventListener('click', () => {
+  document.getElementById('modal-overlay').classList.remove('show');
+});
+document.getElementById('modal-confirm').addEventListener('click', () => {
+  document.getElementById('modal-overlay').classList.remove('show');
+  document.getElementById('delete-msg').className = 'msg-box error';
+  document.getElementById('delete-msg').textContent = '项目已删除（演示）';
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.getElementById('modal-overlay').classList.remove('show');
+  }
+});
+
+// ===== fill =====
+document.getElementById('btn-submit-form').addEventListener('click', () => {
+  const name = document.getElementById('fill-name').value;
+  const email = document.getElementById('fill-email').value;
+  if (!name || !email) {
+    document.getElementById('form-msg').className = 'msg-box error';
+    document.getElementById('form-msg').textContent = '请填写姓名和邮箱';
+    return;
+  }
+  document.getElementById('form-msg').className = 'msg-box success';
+  document.getElementById('form-msg').textContent = `表单提交成功！姓名: ${name}, 邮箱: ${email}`;
+  document.getElementById('success-card').classList.remove('hidden');
+});
+
+// ===== check / uncheck =====
+document.getElementById('cb-newsletter').addEventListener('change', (e) => {
+  const msg = document.getElementById('check-msg');
+  msg.className = 'msg-box info';
+  msg.textContent = e.target.checked ? '当前状态：已订阅新闻邮件' : '当前状态：已取消订阅';
+});
+document.getElementById('cb-agree').addEventListener('change', (e) => {
+  const msg = document.getElementById('cb-msg');
+  msg.className = e.target.checked ? 'msg-box success' : 'msg-box info';
+  msg.textContent = e.target.checked ? '已同意条款' : '已取消同意';
+});
+
+// ===== select =====
+document.getElementById('sel-city').addEventListener('change', (e) => {
+  document.getElementById('sel-msg').className = 'msg-box info';
+  document.getElementById('sel-msg').textContent = `已选择城市: ${e.target.options[e.target.selectedIndex].text}`;
+});
+document.getElementById('sel-lang').addEventListener('change', (e) => {
+  const selected = Array.from(e.target.selectedOptions).map(o => o.text).join(', ');
+  document.getElementById('sel-msg').className = 'msg-box info';
+  document.getElementById('sel-msg').textContent = selected ? `已选择: ${selected}` : '未选择';
+});
+
+// ===== press =====
+document.getElementById('press-input').addEventListener('keydown', (e) => {
+  document.getElementById('press-log').textContent = `按键: ${e.key} (code: ${e.code})`;
+  if (e.key === 'Enter') {
+    const val = e.target.value;
+    if (val) {
+      document.getElementById('press-log').textContent += ` — 提交: "${val}"`;
+    }
+  }
+});
+
+// ===== wait =====
+document.getElementById('btn-wait-start').addEventListener('click', () => {
+  const bar = document.getElementById('wait-progress');
+  const msg = document.getElementById('wait-msg');
+  bar.style.width = '0%';
+  msg.className = 'msg-box';
+  let p = 0;
+  const iv = setInterval(() => {
+    p += 10;
+    bar.style.width = p + '%';
+    if (p >= 100) {
+      clearInterval(iv);
+      msg.className = 'msg-box success';
+    }
+  }, 300);
+});
+
+// ===== upload =====
+document.getElementById('file-input').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files);
+  const msg = document.getElementById('upload-msg');
+  if (files.length) {
+    msg.className = 'msg-box info';
+    msg.textContent = `已选择 ${files.length} 个文件: ${files.map(f => f.name).join(', ')}`;
+  }
+});
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => { dz.classList.remove('dragover'); });
+dz.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dz.classList.remove('dragover');
+  const files = Array.from(e.dataTransfer.files);
+  document.getElementById('upload-msg').className = 'msg-box info';
+  document.getElementById('upload-msg').textContent = `已拖入 ${files.length} 个文件: ${files.map(f => f.name).join(', ')}`;
+});
+
+// ===== hover =====
+const hoverBtn = document.getElementById('btn-hover');
+const hoverTip = document.getElementById('hover-tooltip');
+hoverBtn.addEventListener('mouseenter', () => {
+  hoverTip.style.display = 'block';
+  document.getElementById('hover-msg').className = 'msg-box info';
+});
+hoverBtn.addEventListener('mouseleave', () => {
+  hoverTip.style.display = 'none';
+});
+
+// ===== dblclick =====
+let dblclickState = 0;
+document.getElementById('btn-dblclick').addEventListener('dblclick', () => {
+  dblclickState++;
+  const text = document.getElementById('dblclick-text');
+  const msg = document.getElementById('dblclick-msg');
+  if (dblclickState % 2 === 1) {
+    text.style.color = '#2563eb';
+    text.textContent = '双击已触发！（蓝色）';
+  } else {
+    text.style.color = '#059669';
+    text.textContent = '双击已触发！（绿色）';
+  }
+  msg.className = 'msg-box info';
+});
+
+// ===== drag =====
+const dragSource = document.getElementById('drag-source');
+const dropTarget = document.getElementById('drop-target');
+dragSource.addEventListener('dragstart', (e) => {
+  e.dataTransfer.setData('text/plain', 'drag-source');
+  e.dataTransfer.effectAllowed = 'move';
+});
+dropTarget.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  dropTarget.classList.add('drag-over');
+});
+dropTarget.addEventListener('dragleave', () => {
+  dropTarget.classList.remove('drag-over');
+});
+dropTarget.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropTarget.classList.remove('drag-over');
+  dropTarget.classList.add('has-item');
+  dropTarget.textContent = '📦 拖拽我';
+  dragSource.style.display = 'none';
+  document.getElementById('drag-msg').className = 'msg-box info';
+});
+
+// ===== ask_for_help =====
+document.getElementById('btn-ask-help').addEventListener('click', () => {
+  document.getElementById('ask-msg').className = 'msg-box info';
+});
+
+// ===== abandon =====
+document.getElementById('btn-abandon').addEventListener('click', () => {
+  document.getElementById('abandon-msg').className = 'msg-box error';
+});
+</script>
+
 </body>
 </html>

@@ -27,6 +27,7 @@ RunStatus: TypeAlias = Literal["queued", "running", "succeeded", "failed"]
 RunErrorType: TypeAlias = Literal["model_error", "system_error"]
 ValidationStatus: TypeAlias = Literal["running", "succeeded", "failed"]
 ReportConclusion: TypeAlias = Literal["keep", "optimize", "fix"]
+FrictionSeverity: TypeAlias = Literal["low", "medium", "high"]
 RetrievalSourceType: TypeAlias = Literal["product_knowledge", "failure_case"]
 
 
@@ -58,12 +59,14 @@ class NavigateActionPayload(BaseModel):
 class PressActionPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    selector: str | None = Field(default=None, min_length=1)
     key: str = Field(..., min_length=1)
 
 
 class ScrollActionPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    selector: str | None = Field(default=None, min_length=1)
     direction: Literal["up", "down"] = Field(default="down")
     amount: int = Field(default=300, ge=0)
 
@@ -72,7 +75,9 @@ class UploadActionPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     selector: str = Field(..., min_length=1)
-    file_paths: list[str] = Field(..., min_length=1)
+    file_paths: list[str] = Field(default_factory=list)
+    content: str | None = Field(default=None)
+    filename: str = Field(default="test-upload.txt")
 
 
 class SelectActionPayload(BaseModel):
@@ -170,19 +175,19 @@ ACTION_REGISTRY: dict[ActionName, ActionDefinition] = {
         name="press",
         description="按下键盘按键，如 Enter 提交、Tab 切换焦点、Escape 关闭弹窗。",
         payload_model=PressActionPayload,
-        payload_description='payload 必须为 {"key": "按键名"}，如 "Enter"、"Tab"、"Escape"、"ArrowDown"',
+        payload_description='payload 必须为 {"key": "按键名", "selector": "目标元素选择器(可选)"}，有 selector 时先 focus 到元素再按键',
     ),
     "scroll": ActionDefinition(
         name="scroll",
         description="在页面上滚动以查看更多内容。",
         payload_model=ScrollActionPayload,
-        payload_description='payload 必须为 {"direction": "up 或 down", "amount": 像素数}，amount 默认 300',
+        payload_description='payload 必须为 {"selector": "元素选择器(可选)", "direction": "up 或 down", "amount": 像素数}，有 selector 时滚元素内部，无则滚页面',
     ),
     "upload": ActionDefinition(
         name="upload",
         description="上传文件到页面的文件输入框。",
         payload_model=UploadActionPayload,
-        payload_description='payload 必须为 {"selector": "CSS 选择器", "file_paths": ["文件路径"]}',
+        payload_description='payload 必须为 {"selector": "CSS 选择器", "file_paths": ["文件路径"]} 或 {"selector": "CSS 选择器", "content": "文件内容", "filename": "文件名(可选)"}',
     ),
     "select": ActionDefinition(
         name="select",
@@ -331,14 +336,16 @@ class ActionInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    action: ActionName
-    payload: ActionPayload
-    reason: str = ""
+    action: ActionName = Field(description="动作名称，必须是可选动作之一")
+    payload: Any = Field(description="动作参数对象，字段取决于 action 类型，不要用 target/value 等其他字段名")
+    reason: str = Field(default="", description="一句中文说明选择该动作的原因")
 
     @model_validator(mode="after")
     def _normalize_and_validate(self) -> "ActionInput":
         definition = ACTION_REGISTRY[self.action]
-        if not isinstance(self.payload, definition.payload_model):
+        if isinstance(self.payload, dict):
+            self.payload = definition.payload_model.model_validate(self.payload)
+        elif not isinstance(self.payload, definition.payload_model):
             self.payload = definition.payload_model.model_validate(self.payload.model_dump())
         return self
 
@@ -353,14 +360,14 @@ class ExecutionResult(BaseModel):
 
 
 class ValidationResult(BaseModel):
-    """描述当前步骤的验证结论。"""  # 描述本次动作的执行结果
+    """描述当前步骤的验证结论。"""
 
-    status: ValidationStatus  # 当前验证状态(running/succeded/failed)
-    should_stop: bool  # 判断: 是否需要停止
-    progress_summary: str  # 本次推进的文字总结
-    friction_signals: list[str] = Field(default_factory=list)  # 摩擦信号列表(记录体验问题)
-    detected_success: bool = False  # 是否检测到任务成功?
-    detected_error: bool = False  # 是否检测到任务失败?
+    status: ValidationStatus = Field(description="当前验证状态: running/succeeded/failed")
+    should_stop: bool = Field(description="是否需要停止运行")
+    progress_summary: str = Field(description="本次推进的文字总结")
+    friction_signals: list[str] = Field(default_factory=list, description="摩擦信号列表，记录体验问题")
+    detected_success: bool = Field(default=False, description="是否检测到任务成功")
+    detected_error: bool = Field(default=False, description="是否检测到任务失败")
 
 
 class StepLog(BaseModel):
@@ -392,6 +399,16 @@ class StepLog(BaseModel):
         return self.post_action_page_state
 
 
+class FrictionIssue(BaseModel):
+    """描述一个结构化摩擦问题。"""
+
+    signal: str  # 摩擦信号类型标识符
+    severity: FrictionSeverity  # 严重程度
+    step_indexes: list[int]  # 受影响的步骤编号列表
+    description: str  # 人类可读的问题描述
+    suggested_fix: str = ""  # 可选的修复建议
+
+
 class RunReport(BaseModel):
     """描述最终 run 报告。"""
 
@@ -404,6 +421,7 @@ class RunReport(BaseModel):
     task: Task  # run 执行的是哪个任务
     total_steps: int  # 总步数
     friction_signals: list[str] = Field(default_factory=list)  # run 中的摩擦信号列表
+    friction_issues: list[FrictionIssue] = Field(default_factory=list)  # 结构化摩擦问题列表
     key_findings: list[str] = Field(default_factory=list)  # run 的关键发现
     next_recommendations: list[str] = Field(default_factory=list)  # 本次run 的后续建议
     step_details: list[dict[str, Any]] = Field(default_factory=list)  # 报告中的结构化步骤明细

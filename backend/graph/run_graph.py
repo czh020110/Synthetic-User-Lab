@@ -6,16 +6,15 @@ from __future__ import annotations
 # 模块数据流: RunRequest -> StateGraph -> StepLog[] / RunReport
 # 模块接口说明: run_workflow() 执行一次完整 run
 
+import asyncio
 import json
 import logging
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, cast
 
-from langchain.agents import create_agent
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, SecretStr, ValidationError
 
@@ -83,6 +82,11 @@ async def _invoke_agent_with_retries(
     response_model: type[BaseModel],
     stage: str,
 ) -> BaseModel:
+    """调用 structured agent 并重试 API 失败和格式错误。
+
+    agent 必须是 model.with_structured_output(schema, method='json_mode', include_raw=True)，
+    ainvoke 返回 {"raw": AIMessage, "parsed": Model|None, "parsing_error": Exception|None}。
+    """
     current_messages = list(messages)
     api_failures = 0
     format_failures = 0
@@ -90,21 +94,35 @@ async def _invoke_agent_with_retries(
 
     while True:
         try:
-            response = await agent.ainvoke(cast(Any, {"messages": current_messages}), config=config)
+            result = await agent.ainvoke(current_messages, config=config)
         except Exception as exc:
             api_failures += 1
             if api_failures > MODEL_API_RETRY_LIMIT:
                 raise ModelInvocationError(stage, _raw_exception_message(exc)) from exc
+            await asyncio.sleep(min(2 ** (api_failures - 1), 30))
             continue
 
-        try:
-            return response_model.model_validate(response["structured_response"])
-        except (KeyError, TypeError, ValidationError) as exc:
-            format_failures += 1
-            last_format_error = _format_validation_error(exc)
-            if format_failures > MODEL_FORMAT_RETRY_LIMIT:
-                raise ModelInvocationError(stage, f"模型回复格式不正确: {last_format_error}") from exc
-            current_messages = [*current_messages, _format_retry_prompt(response_model, last_format_error)]
+        # include_raw=True 返回 dict；parsed 可能为 None（格式错误时）
+        parsed = result.get("parsed") if isinstance(result, dict) else None
+        parsing_error = result.get("parsing_error") if isinstance(result, dict) else None
+
+        if parsed is not None and parsing_error is None:
+            try:
+                return response_model.model_validate(parsed)
+            except (KeyError, TypeError, ValidationError):
+                # parsed 已是正确类型但 model_validate 因类型不匹配失败，直接返回
+                return cast(BaseModel, parsed)
+
+        # 格式错误：parsing_error 存在或 parsed 为 None
+        if parsing_error is not None:
+            last_format_error = _format_validation_error(parsing_error)
+        else:
+            last_format_error = "模型返回内容无法解析为预期格式"
+
+        format_failures += 1
+        if format_failures > MODEL_FORMAT_RETRY_LIMIT:
+            raise ModelInvocationError(stage, f"模型回复格式不正确: {last_format_error}") from parsing_error
+        current_messages = [*current_messages, _format_retry_prompt(response_model, last_format_error)]
 
 
 def build_history_summary(step_logs: list[StepLog]) -> str:
@@ -152,44 +170,18 @@ def _create_chat_model(model_name: str) -> Any:
 
 
 def create_run_agents(persona: Persona, task: Task) -> tuple[Any, Any, Any]:
-    """为当前 run 创建决策、验证与等待观察 agent。"""
-    # 将创建模型迁移到节点内部
+    """为当前 run 创建决策、验证与等待观察 agent。
+
+    返回的 agent 使用 with_structured_output(method='json_mode', include_raw=True)，
+    ainvoke 返回 {"raw": AIMessage, "parsed": Model|None, "parsing_error": Exception|None}。
+    """
     settings = get_settings()
     model = _create_chat_model(settings.model_name)
     wait_model = _create_chat_model(settings.fast_model_name or settings.model_name)
-    checkpointer = InMemorySaver()
-    decide_agent = create_agent(
-        model=model,
-        tools=[],
-        checkpointer=checkpointer,
-        system_prompt=decide_system_prompt.format(
-            persona=persona.model_dump_json(indent=2),
-            task=task.model_dump_json(indent=2),
-            action_definitions=render_action_definitions(),
-        ),
-        response_format=ActionInput,
-    )
-    validate_agent = create_agent(
-        model=model,
-        tools=[],
-        checkpointer=checkpointer,
-        system_prompt=validate_system_prompt.format(
-            persona=persona.model_dump_json(indent=2),
-            task=task.model_dump_json(indent=2),
-        ),
-        response_format=ValidationResult,
-    )
-    wait_agent = create_agent(
-        model=wait_model,
-        tools=[],
-        checkpointer=checkpointer,
-        system_prompt=wait_observe_system_prompt.format(
-            persona=persona.model_dump_json(indent=2),
-            task=task.model_dump_json(indent=2),
-        ),
-        response_format=WaitObservationDecision,
-    )
-    return decide_agent, validate_agent, wait_agent
+    decide_structured = model.with_structured_output(ActionInput, method="json_mode", include_raw=True)
+    validate_structured = model.with_structured_output(ValidationResult, method="json_mode", include_raw=True)
+    wait_structured = wait_model.with_structured_output(WaitObservationDecision, method="json_mode", include_raw=True)
+    return decide_structured, validate_structured, wait_structured
 
 
 async def init_session(state: RunState) -> dict:
@@ -260,7 +252,12 @@ async def decide_next_action(state: RunState) -> dict:
 
     step_logs = state.get("step_logs", [])
     retrieval_context_text = render_retrieval_context(state.get("retrieval_context") or [])
-    agent_messages = decide_input_prompt.format_messages(
+    system_message = decide_system_prompt.format(
+        persona=persona.model_dump_json(indent=2),
+        task=task.model_dump_json(indent=2),
+        action_definitions=render_action_definitions(),
+    )
+    user_messages = decide_input_prompt.format_messages(
         current_page_state=page_state.model_dump_json(indent=2),
         clickable_selectors=sorted(clickable_selectors),
         form_field_values=form_field_values,
@@ -272,13 +269,13 @@ async def decide_next_action(state: RunState) -> dict:
     decide_agent = state.get("decide_agent")
     if decide_agent is None:
         raise ValueError("Decide agent is missing before action decision.")
-    agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:decide"}}
+    all_messages = [SystemMessage(content=system_message), *user_messages]
     action = cast(
         ActionInput,
         await _invoke_agent_with_retries(
             decide_agent,
-            agent_messages,
-            agent_config,
+            all_messages,
+            None,
             ActionInput,
             "decide",
         ),
@@ -343,20 +340,24 @@ async def wait_after_action(state: RunState) -> dict:
         normal_remaining_ms: int,
         abnormal_remaining_ms: int,
     ):
-        agent_messages = wait_observe_input_prompt.format_messages(
+        user_messages = wait_observe_input_prompt.format_messages(
             current_page_state=page_state.model_dump_json(indent=2),
             elapsed_ms=elapsed_ms,
             observations=observations,
             normal_remaining_ms=normal_remaining_ms,
             abnormal_remaining_ms=abnormal_remaining_ms,
         )
-        agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:wait:{wait_step_index}"}}
+        system_message = wait_observe_system_prompt.format(
+            persona=persona.model_dump_json(indent=2),
+            task=task.model_dump_json(indent=2),
+        )
+        all_messages = [SystemMessage(content=system_message), *user_messages]
         return cast(
             WaitObservationDecision,
             await _invoke_agent_with_retries(
                 wait_agent,
-                agent_messages,
-                agent_config,
+                all_messages,
+                None,
                 WaitObservationDecision,
                 "wait_observe",
             ),
@@ -504,7 +505,7 @@ async def validate_current_progress(state: RunState) -> dict:
         validation = _build_wait_success_validation(state.get("wait_observation_reason") or "等待观察确认任务已完成。")
     else:
         retrieval_context_text = render_retrieval_context(state.get("retrieval_context") or [])
-        agent_messages = validate_input_prompt.format_messages(
+        user_messages = validate_input_prompt.format_messages(
             latest_page_state=page_state.model_dump_json(indent=2),
             current_action=action_json,
             execution_result=execution_result.model_dump_json(indent=2),
@@ -518,13 +519,17 @@ async def validate_current_progress(state: RunState) -> dict:
         validate_agent = state.get("validate_agent")
         if validate_agent is None:
             raise ValueError("Validate agent is missing before progress validation.")
-        agent_config: Any = {"configurable": {"thread_id": f"{state['run_id']}:validate"}}
+        system_message = validate_system_prompt.format(
+            persona=persona.model_dump_json(indent=2),
+            task=task.model_dump_json(indent=2),
+        )
+        all_messages = [SystemMessage(content=system_message), *user_messages]
         validation = cast(
             ValidationResult,
             await _invoke_agent_with_retries(
                 validate_agent,
-                agent_messages,
-                agent_config,
+                all_messages,
+                None,
                 ValidationResult,
                 "validate",
             ),

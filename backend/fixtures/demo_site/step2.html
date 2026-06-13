@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Step 2 - 表单填写</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
+  header { background: #2563eb; color: #fff; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header a { color: #bfdbfe; text-decoration: none; font-size: 14px; }
+  header a:hover { color: #fff; }
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+  section { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  section h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #1e40af; border-bottom: 2px solid #dbeafe; padding-bottom: 8px; }
+  label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 4px; color: #374151; }
+  input[type="text"], input[type="email"], textarea, select {
+    width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; margin-bottom: 12px;
+  }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+  .btn { display: inline-block; padding: 8px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all .15s; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-outline { background: #fff; color: #2563eb; border: 1px solid #2563eb; }
+  .btn-outline:hover { background: #eff6ff; }
+  .btn-secondary { background: #6b7280; color: #fff; }
+  .msg-box { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-top: 8px; display: none; }
+  .msg-box.success { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  .msg-box.error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+  .msg-box.info { display: block; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 200px; }
+  .step-indicator { display: flex; gap: 8px; margin-bottom: 24px; }
+  .step-indicator .step { padding: 6px 16px; border-radius: 20px; font-size: 13px; background: #e5e7eb; color: #6b7280; }
+  .step-indicator .step.active { background: #2563eb; color: #fff; }
+  .step-indicator .step.done { background: #059669; color: #fff; }
+  .hidden { display: none !important; }
+  .card { background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); border: 2px solid #059669; }
+  .card .success-message { font-size: 18px; font-weight: 600; color: #059669; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Step 2 — 表单填写</h1>
+  <a href="index.html">← 返回首页</a>
+</header>
+
+<div class="container">
+
+<div class="step-indicator">
+  <span class="step done">Step 1 首页</span>
+  <span class="step active">Step 2 表单</span>
+  <span class="step">Step 3 确认</span>
+</div>
+
+<section>
+  <h2>填写联系信息</h2>
+  <div class="row">
+    <div>
+      <label for="s2-name">姓名</label>
+      <input type="text" id="s2-name" placeholder="请输入姓名" data-testid="s2-name"/>
+    </div>
+    <div>
+      <label for="s2-phone">手机号</label>
+      <input type="text" id="s2-phone" placeholder="请输入手机号" data-testid="s2-phone"/>
+    </div>
+  </div>
+  <label for="s2-address">收货地址</label>
+  <textarea id="s2-address" rows="2" placeholder="请输入详细地址" data-testid="s2-address"></textarea>
+  <button class="btn btn-primary" id="s2-submit" data-testid="s2-submit">下一步</button>
+  <div class="msg-box error" id="s2-error">请填写姓名和手机号</div>
+</section>
+
+<section>
+  <h2>导航选项</h2>
+  <a href="index.html" class="btn btn-secondary">返回首页 (navigate)</a>
+  <a href="step3.html" class="btn btn-outline" id="s2-next" data-testid="s2-next">前往 Step 3 (navigate)</a>
+</section>
+
+<section id="success-card" class="card hidden" data-testid="success-card">
+  <h2>Step 2 完成</h2>
+  <p class="success-message" id="success-msg">表单信息已提交！</p>
+</section>
+
+</div>
+
+<script>
+document.getElementById('s2-submit').addEventListener('click', () => {
+  const name = document.getElementById('s2-name').value;
+  const phone = document.getElementById('s2-phone').value;
+  const error = document.getElementById('s2-error');
+  if (!name || !phone) {
+    error.className = 'msg-box error';
+    return;
+  }
+  error.className = 'msg-box';
+  document.getElementById('success-card').classList.remove('hidden');
+  document.getElementById('s2-submit').textContent = '已提交';
+  document.getElementById('s2-submit').disabled = true;
+});
+</script>
+
+</body>
+</html>

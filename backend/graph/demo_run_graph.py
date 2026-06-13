@@ -17,7 +17,6 @@ from backend.schemas.run_schemas import Persona, RunRecord, RunRequest, Task
 from backend.stores.in_memory_run_store import run_store
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 def build_demo_persona() -> Persona:
@@ -36,15 +35,24 @@ def build_demo_persona() -> Persona:
 def build_demo_task(app_base_url: str) -> Task:
     """构造 demo 默认任务。"""
 
+    settings = get_settings()
     return Task(
-        id="demo-task-onboarding",
-        name="验证当前实现的 demo 任务",
-        description="这个 demo 用于验证当前 run 在真实页面流程中的模型决策情况：请进入 demo 页面，按照页面提示完成表单流程，并在页面明确显示任务完成状态后结束。",
+        id="demo-task-action-validation",
+        name="验证受控动作的 demo 任务",
+        description=(
+            "在 demo 动作验证页面中逐一验证受控操作："
+            "1) 点击 +1 按钮增加计数器；"
+            "2) 填写姓名和邮箱并提交表单；"
+            "3) 选择城市下拉框；"
+            "4) 在输入框中按 Enter 键；"
+            "5) 悬停按钮查看提示；"
+            "6) 完成表单提交后确认任务成功。"
+        ),
         start_url=f"{app_base_url}/demo/index.html",
         success_criteria=[
-            "页面明确显示任务完成状态",
-            "成功卡片可见",
-            "表单已隐藏",
+            "success-card 可见",
+            "表单提交成功消息可见",
+            "计数器值大于 0",
         ],
         max_steps=settings.run_step_limit,
         allowed_actions=[

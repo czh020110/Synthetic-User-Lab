@@ -512,12 +512,14 @@ def test_validate_progress_streaks_reset_after_intervening_steps(
 class FakeValidateAgent:
     async def ainvoke(self, *_args, **_kwargs):
         return {
-            "structured_response": ValidationResult(
+            "raw": None,
+            "parsed": ValidationResult(
                 status="succeeded",
                 should_stop=True,
                 progress_summary="agent thinks done",
                 detected_success=True,
-            ).model_dump()
+            ),
+            "parsing_error": None,
         }
 
 
@@ -526,13 +528,16 @@ class RecordingValidateAgent:
         self.calls: list[list[Any]] = []
 
     async def ainvoke(self, payload, **_kwargs):
-        self.calls.append(payload["messages"])
+        # payload 现在是消息列表而不是 {"messages": [...]} dict
+        self.calls.append(payload if isinstance(payload, list) else payload.get("messages", []))
         return {
-            "structured_response": ValidationResult(
+            "raw": None,
+            "parsed": ValidationResult(
                 status="running",
                 should_stop=False,
                 progress_summary="继续观察",
-            ).model_dump()
+            ),
+            "parsing_error": None,
         }
 
 
@@ -587,10 +592,10 @@ def test_validate_current_progress_passes_success_criteria_to_validate_agent() -
     assert result["current_validation_result"].status == "running"
     assert result["should_stop"] is False
     assert validate_agent.calls
-    message = validate_agent.calls[0][0]
-    assert "success_criteria:" in message.content
-    assert "页面出现提交成功" in message.content
-    assert "结果页出现摘要卡片" in message.content
+    all_content = " ".join(msg.content for msg in validate_agent.calls[0])
+    assert "success_criteria:" in all_content
+    assert "页面出现提交成功" in all_content
+    assert "结果页出现摘要卡片" in all_content
 
 
 def test_validate_current_progress_passes_retrieval_context_to_validate_agent() -> None:
@@ -618,10 +623,10 @@ def test_validate_current_progress_passes_retrieval_context_to_validate_agent() 
 
     asyncio.run(run_graph.validate_current_progress(state))
 
-    message = validate_agent.calls[0][0]
-    assert "retrieval_context:" in message.content
-    assert "正常等待提示" in message.content
-    assert "优先等待后端处理结束" in message.content
+    all_content = " ".join(msg.content for msg in validate_agent.calls[0])
+    assert "retrieval_context:" in all_content
+    assert "正常等待提示" in all_content
+    assert "优先等待后端处理结束" in all_content
 
 
 def test_wait_after_action_records_wait_observation(monkeypatch) -> None:
@@ -971,15 +976,22 @@ class BadFormatThenValidDecideAgent:
         self.messages_by_call: list[list[Any]] = []
 
     async def ainvoke(self, payload, **_kwargs):
-        self.messages_by_call.append(payload["messages"])
+        # payload 现在是消息列表
+        self.messages_by_call.append(payload if isinstance(payload, list) else payload.get("messages", []))
         if len(self.messages_by_call) == 1:
-            return {"structured_response": {"action": "invalid", "target": "#submit"}}
+            return {
+                "raw": None,
+                "parsed": None,
+                "parsing_error": ValidationError.from_exception_data(title="ActionInput", line_errors=[]),
+            }
         return {
-            "structured_response": ActionInput(
+            "raw": None,
+            "parsed": ActionInput(
                 action="click",
                 payload=ClickActionPayload(selector="#submit"),
                 reason="格式修正后继续执行",
-            ).model_dump()
+            ),
+            "parsing_error": None,
         }
 
 
@@ -1007,9 +1019,10 @@ def test_decide_next_action_retries_bad_format_with_format_prompt() -> None:
     assert result["current_action"].action == "click"
     assert len(decide_agent.messages_by_call) == 2
     assert len(decide_agent.messages_by_call[1]) == len(decide_agent.messages_by_call[0]) + 1
-    assert "retrieval_context:" in decide_agent.messages_by_call[0][0].content
-    assert "重复点击无进展" in decide_agent.messages_by_call[0][0].content
-    assert "转向受控恢复路径" in decide_agent.messages_by_call[0][0].content
+    all_content_first_call = " ".join(msg.content for msg in decide_agent.messages_by_call[0])
+    assert "retrieval_context:" in all_content_first_call
+    assert "重复点击无进展" in all_content_first_call
+    assert "转向受控恢复路径" in all_content_first_call
     assert "上一次回复未能通过结构化格式校验" in decide_agent.messages_by_call[1][-1].content
     assert "JSON Schema" in decide_agent.messages_by_call[1][-1].content
 
@@ -1020,7 +1033,11 @@ class AlwaysBadFormatDecideAgent:
 
     async def ainvoke(self, *_args, **_kwargs):
         self.calls += 1
-        return {"structured_response": {"action": "invalid", "target": "#submit"}}
+        return {
+            "raw": None,
+            "parsed": None,
+            "parsing_error": ValidationError.from_exception_data(title="ActionInput", line_errors=[]),
+        }
 
 
 def test_decide_next_action_stops_after_format_retry_limit() -> None:
@@ -1174,7 +1191,7 @@ class TestActionPayloadContract:
 
     def test_action_input_rejects_unknown_action_name(self) -> None:
         with pytest.raises(ValidationError):
-            ActionInput(action=cast(Any, "scroll"), payload=cast(Any, {}), reason="test")
+            ActionInput(action=cast(Any, "unknown_action"), payload=cast(Any, {}), reason="test")
 
     def test_action_input_rejects_extra_top_level_field(self) -> None:
         raw = {"action": "click", "payload": ClickActionPayload(selector="#btn").model_dump(), "reason": "test", "target": "#btn"}

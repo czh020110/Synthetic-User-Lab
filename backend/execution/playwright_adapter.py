@@ -86,16 +86,31 @@ async def execute_action(page: Any, action: ActionInput) -> ExecutionResult:
         elif action.action == "press":
             if not isinstance(payload, PressActionPayload):
                 raise ValueError("press action requires PressActionPayload.")
+            if payload.selector:
+                await page.locator(payload.selector).focus()
             await page.keyboard.press(payload.key)
         elif action.action == "scroll":
             if not isinstance(payload, ScrollActionPayload):
                 raise ValueError("scroll action requires ScrollActionPayload.")
             delta = payload.amount if payload.direction == "down" else -payload.amount
-            await page.mouse.wheel(0, delta)
+            if payload.selector:
+                await page.locator(payload.selector).evaluate(f"el => el.scrollBy(0, {delta})")
+            else:
+                await page.mouse.wheel(0, delta)
         elif action.action == "upload":
             if not isinstance(payload, UploadActionPayload):
                 raise ValueError("upload action requires UploadActionPayload.")
-            await page.locator(payload.selector).set_input_files(payload.file_paths)
+            if payload.content is not None:
+                import os
+                import tempfile
+
+                with tempfile.TemporaryDirectory(prefix="sul-upload-") as tmp_dir:
+                    tmp_path = os.path.join(tmp_dir, payload.filename)
+                    with open(tmp_path, "w") as f:
+                        f.write(payload.content)
+                    await page.locator(payload.selector).set_input_files(tmp_path)
+            else:
+                await page.locator(payload.selector).set_input_files(payload.file_paths)
         elif action.action == "select":
             if not isinstance(payload, SelectActionPayload):
                 raise ValueError("select action requires SelectActionPayload.")
