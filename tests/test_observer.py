@@ -14,9 +14,9 @@ class FakeObserverPage:
     async def evaluate(self, script: str):
         if "document.body?.innerText" in script:
             return "开始 姓名"
-        if "button, a" in script:
+        if "button" in script and "input[type=\"submit\"]" in script:
             return [
-                {"text": "开始", "selector": "button:nth-of-type(1)"},
+                {"text": "开始", "selector": "#btn-start"},
                 {"text": "继续", "selector": "#continue-button"},
             ]
         if "input, textarea, select" in script:
@@ -33,7 +33,7 @@ def test_observe_page_returns_executable_selectors() -> None:
     page_state = asyncio.run(observe_page(FakeObserverPage()))
 
     assert [element.selector for element in page_state.clickable_elements] == [
-        "button:nth-of-type(1)",
+        "#btn-start",
         "#continue-button",
     ]
     assert [field.selector for field in page_state.form_fields] == [

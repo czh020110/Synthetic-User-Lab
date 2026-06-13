@@ -16,42 +16,55 @@ async def observe_page(page: Any) -> ObservedPageState:
 
     title = await page.title()
     visible_text = await page.evaluate(
-        r"() => (document.body?.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 600)"
+        r"() => (document.body?.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 1200)"
     )
     clickable_elements = await page.evaluate(
         """
-        () => Array.from(document.querySelectorAll('button, a, [role="button"]'))
-            .filter((element) => !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length))
-            .slice(0, 10)
-            .map((element) => {
-                const tagName = element.tagName.toLowerCase();
-                const sameTagElements = Array.from(document.querySelectorAll(tagName));
-                const sameTagIndex = sameTagElements.indexOf(element) + 1;
+        () => {
+            // button/input[type=submit] 优先，a 和 role=button 靠后
+            const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"]'));
+            const links = Array.from(document.querySelectorAll('a, [role="button"]'));
+            const all = [...buttons, ...links];
+            const visible = all.filter((el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+            return visible.slice(0, 30).map((element, index) => {
+                let selector;
+                if (element.id) {
+                    selector = `#${CSS.escape(element.id)}`;
+                } else if (element.getAttribute('data-testid')) {
+                    selector = `[data-testid="${CSS.escape(element.getAttribute('data-testid'))}"]`;
+                } else {
+                    selector = `[data-clickable-index="${index}"]`;
+                    element.setAttribute('data-clickable-index', String(index));
+                }
                 return {
                     text: (element.innerText || element.textContent || '').trim(),
-                    selector: element.id ? `#${CSS.escape(element.id)}` : `${tagName}:nth-of-type(${sameTagIndex})`,
+                    selector,
                 };
-            })
+            });
+        }
         """
     )
     form_fields = await page.evaluate(
         """
         () => Array.from(document.querySelectorAll('input, textarea, select'))
             .filter((element) => !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length))
-            .slice(0, 10)
+            .slice(0, 20)
             .map((element) => {
-                const tagName = element.tagName.toLowerCase();
                 const name = element.getAttribute('name') || element.id || '';
-                const sameTagElements = Array.from(document.querySelectorAll(tagName));
-                const sameTagIndex = sameTagElements.indexOf(element) + 1;
-                let selector = `${tagName}:nth-of-type(${sameTagIndex})`;
+                let selector;
                 if (element.id) {
                     selector = `#${CSS.escape(element.id)}`;
                 } else if (element.getAttribute('name')) {
+                    const tagName = element.tagName.toLowerCase();
                     selector = `${tagName}[name="${CSS.escape(element.getAttribute('name'))}"]`;
+                } else {
+                    const tagName = element.tagName.toLowerCase();
+                    const sameTagElements = Array.from(document.querySelectorAll(tagName));
+                    const sameTagIndex = sameTagElements.indexOf(element) + 1;
+                    selector = `${tagName}:nth-of-type(${sameTagIndex})`;
                 }
                 return {
-                    name: name || `field-${sameTagIndex}`,
+                    name: name || `field-${element.tagName.toLowerCase()}`,
                     selector,
                     value: element.value || '',
                 };
