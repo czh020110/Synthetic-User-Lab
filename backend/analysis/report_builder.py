@@ -21,6 +21,7 @@ from backend.prompt.report import REPORT_ANALYSIS_PROMPT
 from backend.schemas.run_schemas import (
     FrictionIssue,
     FrictionSeverity,
+    KeyScreenshot,
     ReportConclusion,
     RunRecord,
     RunReport,
@@ -56,6 +57,7 @@ class ReportFacts:
     persona_impact: str | None
     last_progress_summary: str
     step_action_summary: list[dict[str, Any]]
+    key_screenshots: list[KeyScreenshot]
 
 
 def _extract_structured_facts(record: RunRecord, steps: list[StepLog]) -> ReportFacts:
@@ -77,6 +79,7 @@ def _extract_structured_facts(record: RunRecord, steps: list[StepLog]) -> Report
 
     wait_observation_summary = _build_wait_observation_summary(steps)
     persona_impact = _build_persona_impact(record, friction_signals, success)
+    key_screenshots = _extract_key_screenshots(steps, success)
 
     step_action_summary = [
         {
@@ -107,6 +110,7 @@ def _extract_structured_facts(record: RunRecord, steps: list[StepLog]) -> Report
         persona_impact=persona_impact,
         last_progress_summary=last_progress_summary,
         step_action_summary=step_action_summary,
+        key_screenshots=key_screenshots,
     )
 
 
@@ -212,6 +216,7 @@ def _assemble_report(
         next_recommendations=recommendations,
         step_details=[_serialize_step(step) for step in steps],
         structured_facts=_facts_to_dict(facts),
+        key_screenshots=facts.key_screenshots,
         error_type=record.error_type,
         error_message=record.error_message,
     )
@@ -234,6 +239,7 @@ def _facts_to_dict(facts: ReportFacts) -> dict[str, Any]:
         "wait_observation_summary": facts.wait_observation_summary,
         "persona_impact": facts.persona_impact,
         "step_action_summary": facts.step_action_summary,
+        "key_screenshots": [ks.model_dump(mode="json") for ks in facts.key_screenshots],
     }
 
 
@@ -521,6 +527,58 @@ def _collect_friction_signals(steps: list[StepLog]) -> list[str]:
             if signal and signal not in collected:
                 collected.append(signal)
     return collected
+
+
+# ============================ 关键截图提取 ============================ #
+
+
+def _extract_key_screenshots(steps: list[StepLog], success: bool) -> list[KeyScreenshot]:
+    """从步骤日志中提取关键截图，按重要事件筛选。"""
+
+    if not steps:
+        return []
+
+    screenshots: list[KeyScreenshot] = []
+    seen_paths: set[str] = set()
+
+    def _add(label: str, step_index: int, path: str, source: str) -> None:
+        if path and path not in seen_paths:
+            seen_paths.add(path)
+            screenshots.append(KeyScreenshot(label=label, step_index=step_index, path=path, source=source))
+
+    # 第一步起始页面
+    first = steps[0]
+    _add("起始页面", first.step_index, first.observed_page_state.screenshot_path, "before_action")
+
+    # 首个报错步骤
+    for step in steps:
+        if step.validation_result.detected_error:
+            _add("首次报错页面", step.step_index, step.observed_page_state.screenshot_path, "before_action")
+            break
+
+    # 首个恢复相关摩擦信号步骤
+    recovery_signals = {"action_failed", "recovery_candidate", "page_error"}
+    for step in steps:
+        if any(s in recovery_signals for s in step.validation_result.friction_signals):
+            _add("恢复尝试起点", step.step_index, step.observed_page_state.screenshot_path, "before_action")
+            break
+
+    # 首个异常等待观察截图
+    for step in steps:
+        if step.wait_observation_status == "abnormal_stuck" and step.wait_observation_traces:
+            for trace in step.wait_observation_traces:
+                trace_path = trace.get("screenshot_path")
+                if trace_path:
+                    _add("异常等待状态", step.step_index, trace_path, "wait_observation")
+                    break
+            break
+
+    # 成功时最后一步确认截图
+    if success:
+        last = steps[-1]
+        _add("任务成功确认", last.step_index, last.post_action_page_state.screenshot_path, "after_action")
+
+    return screenshots
 
 
 # ============================ 步骤序列化 ============================ #

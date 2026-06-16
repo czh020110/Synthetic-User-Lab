@@ -399,6 +399,15 @@ class StepLog(BaseModel):
         return self.post_action_page_state
 
 
+class KeyScreenshot(BaseModel):
+    """描述报告中关键截图条目。"""
+
+    label: str  # 人类可读标签, e.g. "首次报错页面", "任务成功确认"
+    step_index: int  # 对应步骤编号
+    path: str  # 截图文件路径
+    source: Literal["before_action", "after_action", "wait_observation"]  # 截图来源类型
+
+
 class FrictionIssue(BaseModel):
     """描述一个结构化摩擦问题。"""
 
@@ -426,6 +435,7 @@ class RunReport(BaseModel):
     next_recommendations: list[str] = Field(default_factory=list)  # 本次run 的后续建议
     step_details: list[dict[str, Any]] = Field(default_factory=list)  # 报告中的结构化步骤明细
     structured_facts: dict[str, Any] | None = Field(default=None, description="代码提取的结构化事实摘要，供前端展示或二次分析")
+    key_screenshots: list[KeyScreenshot] = Field(default_factory=list, description="报告中关键截图列表")
     error_type: RunErrorType | None = None  # run 失败时的错误类型
     error_message: str | None = None  # run 失败时的原始错误信息
 

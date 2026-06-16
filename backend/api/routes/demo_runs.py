@@ -109,3 +109,17 @@ async def get_demo_run_report(run_id: str) -> ApiResponse:
             raise HTTPException(status_code=404, detail="Run not found")
         raise HTTPException(status_code=409, detail="Run report is not ready")
     return ApiResponse(data=report)
+
+
+@router.get("/{run_id}/report/markdown", response_model=ApiResponse)
+async def get_demo_run_report_markdown(run_id: str) -> ApiResponse:
+    """返回 demo run 最终报告的 Markdown 渲染。"""
+
+    report = run_store.get_report(run_id)
+    if report is None:
+        record = run_store.get_record(run_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        raise HTTPException(status_code=409, detail="Run report is not ready")
+    from backend.analysis.report_renderer import render_report_markdown
+    return ApiResponse(data={"markdown": render_report_markdown(report)})
