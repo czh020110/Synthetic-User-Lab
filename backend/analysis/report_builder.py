@@ -3,10 +3,12 @@ from __future__ import annotations
 # ============================ 报告生成模块 ============================ #
 # 使用技术栈: Python / Pydantic / LangChain
 # 模块功能: 基于步骤日志整理最终 run 报告，并按本次 run 的证据生成详细报告与建议
-# 模块数据流: RunRecord + StepLog[] -> RunReport
+# 模块数据流: RunRecord + StepLog[] -> _extract_structured_facts -> (optional) Agent -> RunReport
 # 模块接口说明: build_run_report() 返回最终结构化报告, run 结束直接返回报告
+# 架构说明: 事实提取层(纯代码) -> Agent语义层(FAST_MODEL) -> 组装层(纯代码)
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -14,8 +16,16 @@ from pydantic import SecretStr
 
 from backend.ai_api.provider_router import get_model_router
 from backend.analysis.friction_analyzer import analyze_friction
-from backend.prompt.report import RECOMMENDATION_SYSTEM_PROMPT
-from backend.schemas.run_schemas import FrictionIssue, ReportConclusion, RunRecord, RunReport, StepLog
+from backend.core.config import get_settings
+from backend.prompt.report import REPORT_ANALYSIS_PROMPT
+from backend.schemas.run_schemas import (
+    FrictionIssue,
+    FrictionSeverity,
+    ReportConclusion,
+    RunRecord,
+    RunReport,
+    StepLog,
+)
 
 RECOMMENDATION_LIMIT = 10
 CONCLUSION_SEVERITY_ORDER: dict[ReportConclusion, int] = {
@@ -25,6 +35,84 @@ CONCLUSION_SEVERITY_ORDER: dict[ReportConclusion, int] = {
 }
 
 
+# ============================ 事实提取层 ============================ #
+
+
+@dataclass
+class ReportFacts:
+    """代码提取的结构化事实摘要，供 Agent 输入和前端展示。"""
+
+    success: bool
+    conclusion: ReportConclusion
+    total_steps: int
+    error_type: str | None
+    error_message: str | None
+    friction_signals: list[str]
+    friction_issues: list[FrictionIssue]
+    first_issue_step: int | None
+    first_issue_summary: str | None
+    first_issue_error: str | None
+    wait_observation_summary: str | None
+    persona_impact: str | None
+    last_progress_summary: str
+    step_action_summary: list[dict[str, Any]]
+
+
+def _extract_structured_facts(record: RunRecord, steps: list[StepLog]) -> ReportFacts:
+    """从步骤日志提取结构化事实，不生成模板化文案。"""
+
+    success = bool(steps and steps[-1].validation_result.detected_success)
+    last_progress_summary = steps[-1].validation_result.progress_summary if steps else "任务未执行任何步骤。"
+    friction_signals = _collect_friction_signals(steps)
+    conclusion = _build_conclusion(record, steps, success, friction_signals, last_progress_summary)
+    friction_issues = analyze_friction(steps)
+
+    first_issue_step_log = _find_first_issue_step(steps)
+    first_issue_summary = None
+    first_issue_error = None
+    if first_issue_step_log is not None:
+        first_issue_summary = first_issue_step_log.validation_result.progress_summary
+        if first_issue_step_log.execution_result.error_message:
+            first_issue_error = first_issue_step_log.execution_result.error_message
+
+    wait_observation_summary = _build_wait_observation_summary(steps)
+    persona_impact = _build_persona_impact(record, friction_signals, success)
+
+    step_action_summary = [
+        {
+            "index": step.step_index,
+            "action": step.decided_action.action,
+            "selector": getattr(step.decided_action.payload, "selector", None),
+            "success": step.execution_result.success,
+            "validation_summary": step.validation_result.progress_summary,
+            "friction_signals": step.validation_result.friction_signals,
+            "detected_success": step.validation_result.detected_success,
+            "detected_error": step.validation_result.detected_error,
+        }
+        for step in steps
+    ]
+
+    return ReportFacts(
+        success=success,
+        conclusion=conclusion,
+        total_steps=len(steps),
+        error_type=record.error_type,
+        error_message=record.error_message,
+        friction_signals=friction_signals,
+        friction_issues=friction_issues,
+        first_issue_step=first_issue_step_log.step_index if first_issue_step_log else None,
+        first_issue_summary=first_issue_summary,
+        first_issue_error=first_issue_error,
+        wait_observation_summary=wait_observation_summary,
+        persona_impact=persona_impact,
+        last_progress_summary=last_progress_summary,
+        step_action_summary=step_action_summary,
+    )
+
+
+# ============================ 公共接口 ============================ #
+
+
 def build_run_report(record: RunRecord, steps: list[StepLog]) -> RunReport:
     """生成当前 run 的结构化报告。"""
 
@@ -32,7 +120,7 @@ def build_run_report(record: RunRecord, steps: list[StepLog]) -> RunReport:
 
 
 async def build_run_report_async(record: RunRecord, steps: list[StepLog]) -> RunReport:
-    """生成当前 run 的结构化报告。"""
+    """生成当前 run 的结构化报告（异步）。"""
 
     return await _build_run_report_async(record, steps)
 
@@ -40,118 +128,243 @@ async def build_run_report_async(record: RunRecord, steps: list[StepLog]) -> Run
 def build_run_report_without_llm(record: RunRecord, steps: list[StepLog]) -> RunReport:
     """生成不依赖模型分析的兜底报告。"""
 
-    return _build_run_report_sync(record, steps, allow_detailed_report=False)
+    return _build_run_report_sync(record, steps, allow_agent=False)
 
 
-def _build_report_base(record: RunRecord, steps: list[StepLog]) -> tuple[bool, str, list[str], ReportConclusion, list[str]]:
-    success = bool(steps and steps[-1].validation_result.detected_success)
-    last_progress_summary = steps[-1].validation_result.progress_summary if steps else "任务未执行任何步骤。"
-    friction_signals = _collect_friction_signals(steps)
-    conclusion = _build_conclusion(record, steps, success, friction_signals, last_progress_summary)
-    key_findings = _build_base_key_findings(record, steps, success, conclusion, friction_signals, last_progress_summary)
-    return success, last_progress_summary, friction_signals, conclusion, key_findings
+# ============================ 核心构建流程 ============================ #
 
 
 def _build_run_report_sync(
     record: RunRecord,
     steps: list[StepLog],
     *,
-    allow_detailed_report: bool = True,
+    allow_agent: bool = True,
 ) -> RunReport:
-    success, last_progress_summary, friction_signals, conclusion, key_findings = _build_report_base(record, steps)
-    friction_issues = analyze_friction(steps)
+    facts = _extract_structured_facts(record, steps)
 
-    generated_key_findings: list[str] = []
-    recommendations: list[str] = []
-    if allow_detailed_report and _should_generate_detailed_report(record, steps, success, friction_signals, last_progress_summary):
-        analysis = _generate_report_analysis(
-            record=record,
-            steps=steps,
-            success=success,
-            friction_signals=friction_signals,
-            last_progress_summary=last_progress_summary,
-            fallback_conclusion=conclusion,
-            friction_issues=friction_issues,
-        )
-        conclusion = _merge_conclusion(conclusion, analysis.get("conclusion"))
-        generated_key_findings = _dedupe_text_items(analysis.get("key_findings", []))
-        recommendations = _dedupe_text_items(analysis.get("next_recommendations", []), limit=RECOMMENDATION_LIMIT)
+    agent_summary: str | None = None
+    agent_conclusion: ReportConclusion | None = None
+    agent_key_findings: list[str] = []
+    agent_recommendations: list[str] = []
 
-    return _build_report_model(
-        record=record,
-        steps=steps,
-        success=success,
-        last_progress_summary=last_progress_summary,
-        friction_signals=friction_signals,
-        conclusion=conclusion,
-        key_findings=[*key_findings, *generated_key_findings],
-        recommendations=recommendations,
-        friction_issues=friction_issues,
-    )
+    if allow_agent and _should_call_agent(facts):
+        analysis = _generate_report_analysis(facts, record)
+        agent_summary = analysis.get("summary")
+        agent_conclusion = analysis.get("conclusion")
+        agent_key_findings = _dedupe_text_items(analysis.get("key_findings", []))
+        agent_recommendations = _dedupe_text_items(analysis.get("next_recommendations", []), limit=RECOMMENDATION_LIMIT)
+
+    final_conclusion = _merge_conclusion(facts.conclusion, agent_conclusion)
+    summary = agent_summary or facts.last_progress_summary
+    key_findings = agent_key_findings
+
+    return _assemble_report(record, steps, facts, summary, final_conclusion, key_findings, agent_recommendations)
 
 
 async def _build_run_report_async(record: RunRecord, steps: list[StepLog]) -> RunReport:
-    success, last_progress_summary, friction_signals, conclusion, key_findings = _build_report_base(record, steps)
-    friction_issues = analyze_friction(steps)
+    facts = _extract_structured_facts(record, steps)
 
-    generated_key_findings: list[str] = []
-    recommendations: list[str] = []
-    if _should_generate_detailed_report(record, steps, success, friction_signals, last_progress_summary):
-        analysis = await _generate_report_analysis_async(
-            record=record,
-            steps=steps,
-            success=success,
-            friction_signals=friction_signals,
-            last_progress_summary=last_progress_summary,
-            fallback_conclusion=conclusion,
-            friction_issues=friction_issues,
-        )
-        conclusion = _merge_conclusion(conclusion, analysis.get("conclusion"))
-        generated_key_findings = _dedupe_text_items(analysis.get("key_findings", []))
-        recommendations = _dedupe_text_items(analysis.get("next_recommendations", []), limit=RECOMMENDATION_LIMIT)
+    agent_summary: str | None = None
+    agent_conclusion: ReportConclusion | None = None
+    agent_key_findings: list[str] = []
+    agent_recommendations: list[str] = []
 
-    return _build_report_model(
-        record=record,
-        steps=steps,
-        success=success,
-        last_progress_summary=last_progress_summary,
-        friction_signals=friction_signals,
-        conclusion=conclusion,
-        key_findings=[*key_findings, *generated_key_findings],
-        recommendations=recommendations,
-        friction_issues=friction_issues,
-    )
+    if _should_call_agent(facts):
+        analysis = await _generate_report_analysis_async(facts, record)
+        agent_summary = analysis.get("summary")
+        agent_conclusion = analysis.get("conclusion")
+        agent_key_findings = _dedupe_text_items(analysis.get("key_findings", []))
+        agent_recommendations = _dedupe_text_items(analysis.get("next_recommendations", []), limit=RECOMMENDATION_LIMIT)
+
+    final_conclusion = _merge_conclusion(facts.conclusion, agent_conclusion)
+    summary = agent_summary or facts.last_progress_summary
+    key_findings = agent_key_findings
+
+    return _assemble_report(record, steps, facts, summary, final_conclusion, key_findings, agent_recommendations)
 
 
-def _build_report_model(
-    *,
+# ============================ 组装层 ============================ #
+
+
+def _assemble_report(
     record: RunRecord,
     steps: list[StepLog],
-    success: bool,
-    last_progress_summary: str,
-    friction_signals: list[str],
+    facts: ReportFacts,
+    summary: str,
     conclusion: ReportConclusion,
     key_findings: list[str],
     recommendations: list[str],
-    friction_issues: list[FrictionIssue],
 ) -> RunReport:
+    """组装最终 RunReport 模型。"""
+
     return RunReport(
         run_id=record.run_id,
-        status="succeeded" if success else "failed",
-        summary=last_progress_summary,
-        success=success,
+        status="succeeded" if facts.success else "failed",
+        summary=summary,
+        success=facts.success,
         conclusion=conclusion,
         persona=record.persona,
         task=record.task,
-        total_steps=len(steps),
-        friction_signals=friction_signals,
-        friction_issues=friction_issues,
-        key_findings=_dedupe_text_items(key_findings),
+        total_steps=facts.total_steps,
+        friction_signals=facts.friction_signals,
+        friction_issues=facts.friction_issues,
+        key_findings=key_findings,
         next_recommendations=recommendations,
         step_details=[_serialize_step(step) for step in steps],
+        structured_facts=_facts_to_dict(facts),
         error_type=record.error_type,
         error_message=record.error_message,
     )
+
+
+def _facts_to_dict(facts: ReportFacts) -> dict[str, Any]:
+    """将 ReportFacts 转为可 JSON 序列化的字典。"""
+
+    return {
+        "success": facts.success,
+        "conclusion": facts.conclusion,
+        "total_steps": facts.total_steps,
+        "error_type": facts.error_type,
+        "error_message": facts.error_message,
+        "friction_signals": facts.friction_signals,
+        "friction_issues": [issue.model_dump(mode="json") for issue in facts.friction_issues],
+        "first_issue_step": facts.first_issue_step,
+        "first_issue_summary": facts.first_issue_summary,
+        "first_issue_error": facts.first_issue_error,
+        "wait_observation_summary": facts.wait_observation_summary,
+        "persona_impact": facts.persona_impact,
+        "step_action_summary": facts.step_action_summary,
+    }
+
+
+# ============================ Agent 语义层 ============================ #
+
+
+def _should_call_agent(facts: ReportFacts) -> bool:
+    """判断是否需要调用 Agent 生成详细报告。"""
+
+    if facts.total_steps == 0:
+        return False
+    if facts.success and not facts.friction_signals:
+        return False
+    if facts.error_message:
+        return True
+    if facts.friction_signals:
+        return True
+    return not facts.success or _looks_like_problem_summary(facts.last_progress_summary)
+
+
+def _build_report_llm() -> Any | None:
+    """构建使用 FAST_MODEL 的报告分析 LLM。"""
+
+    settings = get_settings()
+    model_name = settings.fast_model_name or settings.model_name
+    router = get_model_router()
+
+    if not model_name or not router.api_key or router.model_provider not in {"openai", "dashscope"}:
+        return None
+
+    if router.model_provider == "openai":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=model_name,
+            api_key=SecretStr(router.api_key),
+            base_url=router.base_url or None,
+        )
+
+    if router.model_provider == "dashscope":
+        from langchain_community.chat_models.tongyi import ChatTongyi
+
+        return ChatTongyi(
+            model=model_name,
+            api_key=SecretStr(router.api_key),
+        )
+
+    return None
+
+
+def _build_agent_messages(facts: ReportFacts, record: RunRecord) -> list[Any]:
+    """构建 Agent 输入消息：精简的结构化事实 + persona/task 信息。"""
+
+    facts_payload = {
+        "run": {
+            "success": facts.success,
+            "total_steps": facts.total_steps,
+            "error_type": facts.error_type,
+            "error_message": facts.error_message,
+        },
+        "persona": {
+            "id": record.persona.id,
+            "name": record.persona.name,
+            "description": record.persona.description,
+            "skill_level": record.persona.skill_level,
+            "patience_level": record.persona.patience_level,
+            "risk_preference": record.persona.risk_preference,
+        },
+        "task": {
+            "id": record.task.id,
+            "name": record.task.name,
+            "description": record.task.description,
+            "success_criteria": record.task.success_criteria,
+        },
+        "facts": {
+            "fallback_conclusion": facts.conclusion,
+            "friction_signals": facts.friction_signals,
+            "friction_issues": [issue.model_dump(mode="json") for issue in facts.friction_issues],
+            "first_issue_step": facts.first_issue_step,
+            "first_issue_summary": facts.first_issue_summary,
+            "first_issue_error": facts.first_issue_error,
+            "wait_observation_summary": facts.wait_observation_summary,
+            "persona_impact": facts.persona_impact,
+            "last_progress_summary": facts.last_progress_summary,
+        },
+        "step_summary": facts.step_action_summary,
+    }
+
+    return [
+        SystemMessage(content=REPORT_ANALYSIS_PROMPT),
+        HumanMessage(content=json.dumps(facts_payload, ensure_ascii=False, indent=2)),
+    ]
+
+
+def _generate_report_analysis(facts: ReportFacts, record: RunRecord) -> dict[str, Any]:
+    """调用 FAST_MODEL 生成报告语义层（同步）。"""
+
+    llm = _build_report_llm()
+    if llm is None:
+        return {}
+
+    messages = _build_agent_messages(facts, record)
+
+    try:
+        response = llm.invoke(messages)
+    except Exception:
+        return {}
+
+    response_text = _extract_message_text(response)
+    return _parse_report_analysis(response_text)
+
+
+async def _generate_report_analysis_async(facts: ReportFacts, record: RunRecord) -> dict[str, Any]:
+    """调用 FAST_MODEL 生成报告语义层（异步）。"""
+
+    llm = _build_report_llm()
+    if llm is None:
+        return {}
+
+    messages = _build_agent_messages(facts, record)
+
+    try:
+        response = await llm.ainvoke(messages)
+    except Exception:
+        return {}
+
+    response_text = _extract_message_text(response)
+    return _parse_report_analysis(response_text)
+
+
+# ============================ 事实提取辅助函数 ============================ #
 
 
 def _build_conclusion(
@@ -172,56 +385,17 @@ def _build_conclusion(
     return "keep"
 
 
-def _build_base_key_findings(
-    record: RunRecord,
-    steps: list[StepLog],
-    success: bool,
-    conclusion: ReportConclusion,
-    friction_signals: list[str],
-    last_progress_summary: str,
-) -> list[str]:
-    findings = [
-        f"共执行 {len(steps)} 步。",
-        f"最终状态为 {'成功' if success else '失败'}。",
-        f"最终结论为 {conclusion}。",
-        f"最后一步判定：{last_progress_summary}",
-    ]
-
-    if friction_signals:
-        findings.append(f"检测到摩擦信号: {', '.join(friction_signals)}。")
-
-    wait_finding = _build_wait_observation_finding(steps)
-    if wait_finding:
-        findings.append(wait_finding)
-
-    first_issue_step = _find_first_issue_step(steps)
-    if first_issue_step is not None:
-        findings.append(
-            f"首次明显问题出现在第 {first_issue_step.step_index} 步：{first_issue_step.validation_result.progress_summary}"
-        )
-        if first_issue_step.execution_result.error_message:
-            findings.append(f"对应执行错误：{first_issue_step.execution_result.error_message}")
-
-    if record.error_message:
-        findings.append(f"运行过程中出现{_format_error_type(record.error_type)}：{record.error_message}")
-
-    persona_finding = _build_persona_impact_finding(record, friction_signals, success)
-    if persona_finding:
-        findings.append(persona_finding)
-
-    return findings
+def _find_first_issue_step(steps: list[StepLog]) -> StepLog | None:
+    for step in steps:
+        if step.validation_result.detected_error or step.validation_result.friction_signals:
+            return step
+    return None
 
 
-def _format_error_type(error_type: str | None) -> str:
-    if error_type == "model_error":
-        return "模型调用错误"
-    return "系统异常中断"
-
-
-def _build_wait_observation_finding(steps: list[StepLog]) -> str:
+def _build_wait_observation_summary(steps: list[StepLog]) -> str | None:
     wait_steps = [step for step in steps if step.wait_observation_status]
     if not wait_steps:
-        return ""
+        return None
 
     descriptions = []
     for step in wait_steps:
@@ -235,14 +409,14 @@ def _build_wait_observation_finding(steps: list[StepLog]) -> str:
     return "；".join(descriptions) + "。"
 
 
-def _build_persona_impact_finding(
+def _build_persona_impact(
     record: RunRecord,
     friction_signals: list[str],
     success: bool,
-) -> str:
+) -> str | None:
     persona = record.persona
     if not friction_signals and success:
-        return ""
+        return None
 
     risk_explanations: list[str] = []
     if persona.skill_level == "newbie":
@@ -255,237 +429,12 @@ def _build_persona_impact_finding(
         risk_explanations.append("在主路径提示不够清晰时更容易偏离任务目标")
 
     if not risk_explanations:
-        return ""
+        return None
 
     return f"对于 persona「{persona.name}」，这次问题更容易出现，因为该类用户{'; '.join(risk_explanations)}。"
 
 
-def _should_generate_detailed_report(
-    record: RunRecord,
-    steps: list[StepLog],
-    success: bool,
-    friction_signals: list[str],
-    last_progress_summary: str,
-) -> bool:
-    if not steps:
-        return False
-    if success and not friction_signals:
-        return False
-    if record.error_message:
-        return True
-    if friction_signals:
-        return True
-    return not success or _looks_like_problem_summary(last_progress_summary)
-
-
-def _build_recommendation_messages(
-    record: RunRecord,
-    steps: list[StepLog],
-    success: bool,
-    friction_signals: list[str],
-    last_progress_summary: str,
-    fallback_conclusion: ReportConclusion,
-    friction_issues: list[FrictionIssue],
-) -> list[Any]:
-    prompt_payload = _build_recommendation_payload(
-        record,
-        steps,
-        success,
-        friction_signals,
-        last_progress_summary,
-        fallback_conclusion,
-        friction_issues=friction_issues,
-    )
-    return [
-        SystemMessage(content=RECOMMENDATION_SYSTEM_PROMPT),
-        HumanMessage(content=json.dumps(prompt_payload, ensure_ascii=False, indent=2)),
-    ]
-
-
-def _generate_report_analysis(
-    record: RunRecord,
-    steps: list[StepLog],
-    success: bool,
-    friction_signals: list[str],
-    last_progress_summary: str,
-    fallback_conclusion: ReportConclusion,
-    friction_issues: list[FrictionIssue],
-) -> dict[str, Any]:
-    llm = _build_recommendation_llm()
-    if llm is None:
-        return {}
-
-    messages = _build_recommendation_messages(
-        record,
-        steps,
-        success,
-        friction_signals,
-        last_progress_summary,
-        fallback_conclusion,
-        friction_issues=friction_issues,
-    )
-
-    try:
-        response = llm.invoke(messages)
-    except Exception:
-        return {}
-
-    response_text = _extract_message_text(response)
-    return _parse_report_analysis(response_text)
-
-
-async def _generate_report_analysis_async(
-    record: RunRecord,
-    steps: list[StepLog],
-    success: bool,
-    friction_signals: list[str],
-    last_progress_summary: str,
-    fallback_conclusion: ReportConclusion,
-    friction_issues: list[FrictionIssue],
-) -> dict[str, Any]:
-    llm = _build_recommendation_llm()
-    if llm is None:
-        return {}
-
-    messages = _build_recommendation_messages(
-        record,
-        steps,
-        success,
-        friction_signals,
-        last_progress_summary,
-        fallback_conclusion,
-        friction_issues=friction_issues,
-    )
-
-    try:
-        response = await llm.ainvoke(messages)
-    except Exception:
-        return {}
-
-    response_text = _extract_message_text(response)
-    return _parse_report_analysis(response_text)
-
-
-def _build_recommendation_llm() -> Any | None:
-    router = get_model_router()
-    if not router.model_name or router.model_provider not in {"openai", "dashscope"}:
-        return None
-
-    if router.model_provider == "openai":
-        if not router.api_key:
-            return None
-        from langchain_openai import ChatOpenAI
-
-        return ChatOpenAI(
-            model=router.model_name,
-            api_key=SecretStr(router.api_key),
-            base_url=router.base_url or None,
-        )
-
-    if router.model_provider == "dashscope":
-        if not router.api_key:
-            return None
-        from langchain_community.chat_models.tongyi import ChatTongyi
-
-        return ChatTongyi(
-            model=router.model_name,
-            api_key=SecretStr(router.api_key),
-        )
-
-    return None
-
-
-def _build_recommendation_payload(
-    record: RunRecord,
-    steps: list[StepLog],
-    success: bool,
-    friction_signals: list[str],
-    last_progress_summary: str,
-    fallback_conclusion: ReportConclusion,
-    friction_issues: list[FrictionIssue],
-) -> dict[str, Any]:
-    return {
-        "run": {
-            "run_id": record.run_id,
-            "status": record.status,
-            "success": success,
-            "error_type": record.error_type,
-            "error_message": record.error_message,
-            "step_count": len(steps),
-        },
-        "persona": {
-            "id": record.persona.id,
-            "name": record.persona.name,
-            "description": record.persona.description,
-            "skill_level": record.persona.skill_level,
-            "patience_level": record.persona.patience_level,
-            "risk_preference": record.persona.risk_preference,
-        },
-        "task": {
-            "id": record.task.id,
-            "name": record.task.name,
-            "description": record.task.description,
-            "start_url": record.task.start_url,
-            "success_criteria": record.task.success_criteria,
-            "max_steps": record.task.max_steps,
-            "allowed_actions": record.task.allowed_actions,
-            "risk_level": record.task.risk_level,
-            "destructive_action_allowed": record.task.destructive_action_allowed,
-        },
-        "signals": {
-            "friction_signals": friction_signals,
-            "friction_issues": [issue.model_dump(mode="json") for issue in friction_issues],
-            "last_progress_summary": last_progress_summary,
-            "problem_summary": _summarize_problem_pattern(steps),
-            "fallback_conclusion": fallback_conclusion,
-        },
-        "all_steps": [_serialize_step(step) for step in steps],
-    }
-
-
-def _serialize_step(step: StepLog) -> dict[str, Any]:
-    return {
-        "step_index": step.step_index,
-        "before_page_state": step.observed_page_state.model_dump(mode="json"),
-        "action": step.decided_action.action,
-        "payload": step.decided_action.payload.model_dump(mode="json"),
-        "action_reason": step.decided_action.reason,
-        "execution_success": step.execution_result.success,
-        "execution_detail": step.execution_result.detail,
-        "execution_error_message": step.execution_result.error_message,
-        "validation_status": step.validation_result.status,
-        "validation_summary": step.validation_result.progress_summary,
-        "validation_friction_signals": step.validation_result.friction_signals,
-        "detected_success": step.validation_result.detected_success,
-        "detected_error": step.validation_result.detected_error,
-        "after_page_state": step.post_action_page_state.model_dump(mode="json"),
-        "wait_observation_status": step.wait_observation_status,
-        "wait_observation_reason": step.wait_observation_reason,
-        "wait_observation_observations": step.wait_observation_observations,
-        "wait_observation_elapsed_ms": step.wait_observation_elapsed_ms,
-        "wait_observation_timeout_ms": step.wait_observation_timeout_ms,
-        "wait_observation_terminal_decision": step.wait_observation_terminal_decision,
-        "wait_observation_traces": step.wait_observation_traces,
-        "retrieval_context": [item.model_dump(mode="json") for item in step.retrieval_context],
-    }
-
-
-def _summarize_problem_pattern(steps: list[StepLog]) -> dict[str, Any]:
-    friction_counts: dict[str, int] = {}
-    problem_step_indexes: list[int] = []
-    for step in steps:
-        if step.validation_result.friction_signals or step.validation_result.detected_error:
-            problem_step_indexes.append(step.step_index)
-        for signal in step.validation_result.friction_signals:
-            friction_counts[signal] = friction_counts.get(signal, 0) + 1
-
-    return {
-        "friction_counts": friction_counts,
-        "problem_step_indexes": problem_step_indexes,
-        "last_actions": [step.decided_action.action for step in steps[-3:]],
-        "last_action_payloads": [step.decided_action.payload.model_dump(mode="json") for step in steps[-3:]],
-        "last_validation_summaries": [step.validation_result.progress_summary for step in steps[-3:]],
-    }
+# ============================ Agent 输出解析 ============================ #
 
 
 def _extract_message_text(response: Any) -> str:
@@ -499,8 +448,18 @@ def _parse_report_analysis(text: str) -> dict[str, Any]:
     if not text:
         return {}
 
+    # Strip markdown code fences that LLMs frequently wrap around JSON
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        first_newline = stripped.index("\n") if "\n" in stripped else -1
+        if first_newline >= 0:
+            stripped = stripped[first_newline + 1:]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+        stripped = stripped.strip()
+
     try:
-        payload = json.loads(text)
+        payload = json.loads(stripped)
     except json.JSONDecodeError:
         return {}
 
@@ -509,6 +468,7 @@ def _parse_report_analysis(text: str) -> dict[str, Any]:
 
     conclusion = payload.get("conclusion")
     normalized: dict[str, Any] = {
+        "summary": payload.get("summary", ""),
         "conclusion": conclusion if conclusion in CONCLUSION_SEVERITY_ORDER else None,
         "key_findings": _dedupe_text_items(payload.get("key_findings", [])),
         "next_recommendations": _dedupe_text_items(
@@ -519,11 +479,7 @@ def _parse_report_analysis(text: str) -> dict[str, Any]:
     return normalized
 
 
-def _find_first_issue_step(steps: list[StepLog]) -> StepLog | None:
-    for step in steps:
-        if step.validation_result.detected_error or step.validation_result.friction_signals:
-            return step
-    return None
+# ============================ 通用工具函数 ============================ #
 
 
 def _merge_conclusion(
@@ -532,10 +488,9 @@ def _merge_conclusion(
 ) -> ReportConclusion:
     if generated_conclusion not in CONCLUSION_SEVERITY_ORDER:
         return fallback_conclusion
-    generated = generated_conclusion
-    if CONCLUSION_SEVERITY_ORDER[generated] < CONCLUSION_SEVERITY_ORDER[fallback_conclusion]:
+    if CONCLUSION_SEVERITY_ORDER[generated_conclusion] < CONCLUSION_SEVERITY_ORDER[fallback_conclusion]:
         return fallback_conclusion
-    return generated
+    return generated_conclusion
 
 
 def _dedupe_text_items(items: Any, limit: int | None = None) -> list[str]:
@@ -566,3 +521,33 @@ def _collect_friction_signals(steps: list[StepLog]) -> list[str]:
             if signal and signal not in collected:
                 collected.append(signal)
     return collected
+
+
+# ============================ 步骤序列化 ============================ #
+
+
+def _serialize_step(step: StepLog) -> dict[str, Any]:
+    return {
+        "step_index": step.step_index,
+        "before_page_state": step.observed_page_state.model_dump(mode="json"),
+        "action": step.decided_action.action,
+        "payload": step.decided_action.payload.model_dump(mode="json"),
+        "action_reason": step.decided_action.reason,
+        "execution_success": step.execution_result.success,
+        "execution_detail": step.execution_result.detail,
+        "execution_error_message": step.execution_result.error_message,
+        "validation_status": step.validation_result.status,
+        "validation_summary": step.validation_result.progress_summary,
+        "validation_friction_signals": step.validation_result.friction_signals,
+        "detected_success": step.validation_result.detected_success,
+        "detected_error": step.validation_result.detected_error,
+        "after_page_state": step.post_action_page_state.model_dump(mode="json"),
+        "wait_observation_status": step.wait_observation_status,
+        "wait_observation_reason": step.wait_observation_reason,
+        "wait_observation_observations": step.wait_observation_observations,
+        "wait_observation_elapsed_ms": step.wait_observation_elapsed_ms,
+        "wait_observation_timeout_ms": step.wait_observation_timeout_ms,
+        "wait_observation_terminal_decision": step.wait_observation_terminal_decision,
+        "wait_observation_traces": step.wait_observation_traces,
+        "retrieval_context": [item.model_dump(mode="json") for item in step.retrieval_context],
+    }

@@ -425,6 +425,7 @@ class RunReport(BaseModel):
     key_findings: list[str] = Field(default_factory=list)  # run 的关键发现
     next_recommendations: list[str] = Field(default_factory=list)  # 本次run 的后续建议
     step_details: list[dict[str, Any]] = Field(default_factory=list)  # 报告中的结构化步骤明细
+    structured_facts: dict[str, Any] | None = Field(default=None, description="代码提取的结构化事实摘要，供前端展示或二次分析")
     error_type: RunErrorType | None = None  # run 失败时的错误类型
     error_message: str | None = None  # run 失败时的原始错误信息
 
