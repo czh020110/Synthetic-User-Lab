@@ -38,6 +38,7 @@ screenshots/
 .env
 .env.*
 *.sqlite3
+data/
 
 # Playwright artifacts
 playwright-report/

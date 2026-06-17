@@ -14,9 +14,10 @@ from backend.graph.run_graph import create_run_agents, build_run_graph, run_work
 from backend.graph.run_state import RunState
 from backend.retrieval import build_retrieval_context
 from backend.schemas.run_schemas import Persona, RunRecord, RunRequest, Task
-from backend.stores.in_memory_run_store import run_store
+from backend.stores import get_run_store
 
 logger = logging.getLogger(__name__)
+run_store = get_run_store()
 
 
 def build_demo_persona() -> Persona:

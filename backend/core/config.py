@@ -28,6 +28,7 @@ class Settings(BaseModel):
     run_step_limit: int
     demo_site_dir: Path
     screenshot_dir: Path
+    database_url: Path
     custom_system_prompt: str
     model_provider: str
     base_url: str
@@ -55,6 +56,7 @@ def get_settings() -> Settings:
         run_step_limit=int(os.getenv("SYNTHETIC_USER_LAB_RUN_STEP_LIMIT", "8")),
         demo_site_dir=BASE_DIR / "backend" / "fixtures" / "demo_site",
         screenshot_dir=BASE_DIR / "screenshots",
+        database_url=Path(os.getenv("SYNTHETIC_USER_LAB_DATABASE_URL", str(BASE_DIR / "data" / "synthetic_user_lab.db"))),
         custom_system_prompt=os.getenv("CUSTOM_SYSTEM_PROMPT", ""),
         model_provider=model_router.model_provider,
         base_url=model_router.base_url,
@@ -64,4 +66,6 @@ def get_settings() -> Settings:
     )
     settings.demo_site_dir.mkdir(parents=True, exist_ok=True)
     settings.screenshot_dir.mkdir(parents=True, exist_ok=True)
+    if str(settings.database_url) != ":memory:":
+        settings.database_url.parent.mkdir(parents=True, exist_ok=True)
     return settings

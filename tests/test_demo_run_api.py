@@ -22,7 +22,9 @@ from backend.schemas.run_schemas import (
     ValidationResult,
     WaitActionPayload,
 )
-from backend.stores.in_memory_run_store import run_store
+from backend.stores import get_run_store
+
+run_store = get_run_store()
 
 client = TestClient(app)
 api_prefix = get_settings().api_prefix

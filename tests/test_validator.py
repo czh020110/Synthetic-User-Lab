@@ -29,7 +29,9 @@ from backend.schemas.run_schemas import (
     WaitActionPayload,
 )
 from backend.graph.wait_observer import WaitObservationResult, WaitObservationTrace
-from backend.stores.in_memory_run_store import run_store
+from backend.stores import get_run_store
+
+run_store = get_run_store()
 
 START_URL = "http://127.0.0.1:8000/demo/index.html"
 OTHER_URL = "http://127.0.0.1:8000/demo/other.html"

@@ -15,11 +15,12 @@ from fastapi import APIRouter, HTTPException, Request
 from backend.core.config import get_settings
 from backend.graph.demo_run_graph import create_demo_placeholder_record, run_demo_workflow
 from backend.schemas.run_schemas import ApiResponse, RunRequest
-from backend.stores.in_memory_run_store import run_store
+from backend.stores import get_run_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/runs/demo", tags=["demo-runs"])
 _background_tasks: set[asyncio.Task] = set()
+run_store = get_run_store()
 
 
 def _track_background_task(run_id: str, task: asyncio.Task) -> None:

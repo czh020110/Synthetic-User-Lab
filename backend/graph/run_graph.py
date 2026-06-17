@@ -48,11 +48,12 @@ from backend.schemas.run_schemas import (
     ValidationResult,
     render_action_definitions,
 )
-from backend.stores.in_memory_run_store import run_store
+from backend.stores import get_run_store
 
 logger = logging.getLogger(__name__)
 MODEL_API_RETRY_LIMIT = 5
 MODEL_FORMAT_RETRY_LIMIT = 3
+run_store = get_run_store()
 
 
 class ModelInvocationError(RuntimeError):
