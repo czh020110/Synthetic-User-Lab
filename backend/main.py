@@ -6,7 +6,7 @@ from __future__ import annotations
 # 模块数据流: Settings -> FastAPI app -> Router / StaticFiles
 # 模块接口说明: app 为服务主入口
 # 初始化说明: run_store 在模块导入时由 get_run_store() 创建（含建库建表），
-#   lifespan 只负责关闭时释放连接
+#   lifespan 负责启动时 seed demo 实体，关闭时释放连接
 
 from contextlib import asynccontextmanager
 
@@ -21,11 +21,25 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 启动：seed demo persona/task 到 EntityStore（幂等，已存在则跳过）
+    from backend.graph.demo_run_graph import build_demo_persona, build_demo_task
+    from backend.stores import get_entity_store
+
+    entity_store = get_entity_store()
+    demo_persona = build_demo_persona()
+    if entity_store.get_persona(demo_persona.id) is None:
+        entity_store.create_persona(demo_persona)
+    demo_task = build_demo_task(str(settings.app_base_url))
+    if entity_store.get_task(demo_task.id) is None:
+        entity_store.create_task(demo_task)
+
     yield
+
     # 关闭：释放数据库连接并重置存储单例
-    from backend.stores import _reset_run_store
+    from backend.stores import _reset_entity_store, _reset_run_store
 
     _reset_run_store()
+    _reset_entity_store()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

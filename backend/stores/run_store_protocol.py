@@ -53,6 +53,10 @@ class RunStore(Protocol):
         """返回最终报告。"""
         ...
 
+    def list_run_ids(self) -> list[str]:
+        """返回所有 run_id 列表，按创建时间倒序。"""
+        ...
+
     def clear(self) -> None:
         """清空全部数据。仅用于测试。"""
         ...

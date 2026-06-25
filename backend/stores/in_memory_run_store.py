@@ -6,15 +6,8 @@ from __future__ import annotations
 # 模块数据流: API 创建记录 -> 图执行逐步写入 -> API 查询状态/步骤/报告
 # 模块接口说明: InMemoryRunStore 提供 create/get/update/complete/fail 方法
 
-from datetime import datetime, timezone
-
+from backend.core.utils import utc_now
 from backend.schemas.run_schemas import RunErrorType, RunRecord, RunReport, RunStatusResponse, StepLog
-
-
-def utc_now() -> datetime:
-    """返回当前 UTC 时间。"""
-
-    return datetime.now(timezone.utc)
 
 
 class InMemoryRunStore:
@@ -113,6 +106,12 @@ class InMemoryRunStore:
 
         report = self._reports.get(run_id)
         return report.model_copy(deep=True) if report else None
+
+    def list_run_ids(self) -> list[str]:
+        """返回所有 run_id 列表，按创建时间倒序。"""
+
+        records = sorted(self._records.values(), key=lambda r: r.created_at, reverse=True)
+        return [r.run_id for r in records]
 
 # model_copy复制模型对象pydantic, 用来:复制但需要修改,只复制的情况
 # 用于返回一个完全独立的副本, 调用方法修改这个返回值不会直接影响保存的原始报告

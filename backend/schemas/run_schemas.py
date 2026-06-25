@@ -13,12 +13,11 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-ActionName: TypeAlias = Literal[
-    "navigate", "click", "fill", "wait",
-    "press", "scroll", "upload", "select",
-    "hover", "check", "uncheck", "dblclick",
-    "drag", "ask_for_help", "abandon",
-]
+# 从独立模块 re-export，保持现有 import 路径兼容
+from backend.schemas.knowledge_schemas import RetrievalSourceType  # noqa: F401
+from backend.schemas.persona_schemas import Persona  # noqa: F401
+from backend.schemas.task_schemas import ActionName  # noqa: F401
+from backend.schemas.task_schemas import Task  # noqa: F401
 WaitObservationStatus: TypeAlias = Literal["success", "actionable", "normal_timeout", "abnormal_stuck"]
 WaitObservationDecisionName: TypeAlias = Literal[
     "normal_waiting", "abnormal_stuck", "ready_for_next_action", "task_completed"
@@ -28,7 +27,6 @@ RunErrorType: TypeAlias = Literal["model_error", "system_error"]
 ValidationStatus: TypeAlias = Literal["running", "succeeded", "failed"]
 ReportConclusion: TypeAlias = Literal["keep", "optimize", "fix"]
 FrictionSeverity: TypeAlias = Literal["low", "medium", "high"]
-RetrievalSourceType: TypeAlias = Literal["product_knowledge", "failure_case"]
 
 
 class ClickActionPayload(BaseModel):
@@ -247,10 +245,7 @@ def render_action_definitions() -> str:
     )
 
 
-def utc_now() -> datetime:
-    """返回当前 UTC 时间。"""
-
-    return datetime.now(timezone.utc)
+from backend.core.utils import utc_now  # noqa: F401 - re-export for backward compatibility
 
 
 class ApiResponse(BaseModel):
@@ -260,32 +255,8 @@ class ApiResponse(BaseModel):
     message: str = "ok"
     data: Any | None = None
 
-# ========= Demo require========== #
-
-class Persona(BaseModel):
-    """描述当前 run 使用的 persona。"""
-
-    id: str = "persona-default"
-    name: str = "默认测试用户"
-    description: str = "会按照页面主路径逐步完成任务，不进行高风险操作。"
-    skill_level: str = "newbie"  # 用户熟练度，newbie 表示新手型用户。
-    patience_level: str = "medium"  # 用户耐心程度，medium 表示遇到小问题会继续尝试。
-    risk_preference: str = "low"  # 用户风险偏好，low 表示倾向安全操作，不主动尝试高风险动作。
-
-
-class Task(BaseModel):
-    """描述当前 run 使用的任务。"""
-
-    id: str = "task-default"
-    name: str = "完成页面任务"
-    description: str = "进入页面后，根据页面提示完成当前任务；如页面要求填写表单，可自行生成合理的测试数据。"
-    start_url: str
-    success_criteria: list[str] = Field(default_factory=list)
-    max_steps: int = 8
-    allowed_actions: list[ActionName] = Field(default_factory=lambda: ["navigate", "click", "fill", "wait"])
-    risk_level: str = "low"
-    destructive_action_allowed: bool = False  # 是否允许执行"破坏性动作":删除/提交/发布/支付等
-
+# Persona 和 Task 定义已移至 backend/schemas/persona_schemas.py 和 backend/schemas/task_schemas.py
+# 通过上方 re-export 保持现有 import 路径兼容
 
 class RetrievedContextItem(BaseModel):
     """描述检索到的上下文片段。"""
@@ -297,10 +268,19 @@ class RetrievedContextItem(BaseModel):
 
 
 class RunRequest(BaseModel):
-    """定义启动 run 的请求体。"""
+    """定义启动 demo run 的请求体。"""
 
     run_name: str = "run"
     headless: bool | None = None  # 是否无头浏览器模式，None系统默认,True不打开浏览器,后台跑, False打开浏览器窗口
+
+
+class FormalRunRequest(BaseModel):
+    """定义正式 run 的请求体，引用已存在的 persona 和 task。"""
+
+    persona_id: str = Field(..., min_length=1)
+    task_id: str = Field(..., min_length=1)
+    run_name: str = Field(default="run")
+    headless: bool | None = None
 
 # ========= Demo require========== #
 

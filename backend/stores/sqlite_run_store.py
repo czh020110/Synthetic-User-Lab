@@ -8,9 +8,10 @@ from __future__ import annotations
 # 线程安全约束: 仅限事件循环单线程内同步调用，不支持多线程并发写同一连接
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
+from backend.core.utils import utc_now
 from backend.schemas.run_schemas import (
     Persona,
     RunErrorType,
@@ -56,12 +57,6 @@ CREATE INDEX IF NOT EXISTS idx_step_logs_run_id ON step_logs(run_id);
 CREATE INDEX IF NOT EXISTS idx_run_records_status ON run_records(status);
 CREATE INDEX IF NOT EXISTS idx_run_records_created_at ON run_records(created_at);
 """
-
-
-def utc_now() -> datetime:
-    """返回当前 UTC 时间。"""
-
-    return datetime.now(timezone.utc)
 
 
 def _dt_to_str(dt: datetime) -> str:
@@ -277,6 +272,13 @@ class SqliteRunStore:
         if row is None:
             return None
         return RunReport.model_validate_json(row["report_json"])
+
+    def list_run_ids(self) -> list[str]:
+        """返回所有 run_id 列表，按创建时间倒序。"""
+
+        conn = self._get_conn()
+        rows = conn.execute("SELECT run_id FROM run_records ORDER BY created_at DESC").fetchall()
+        return [r["run_id"] for r in rows]
 
     def clear(self) -> None:
         """清空全部数据。仅用于测试。"""

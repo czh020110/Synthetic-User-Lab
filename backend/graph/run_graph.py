@@ -722,8 +722,12 @@ async def run_workflow(
     app_base_url: str,
     screenshot_dir: Path,
     load_context_node: Any,
+    extra_initial_state: dict | None = None,
 ):
-    """执行一次完整 run。"""
+    """执行一次完整 run。
+
+    extra_initial_state: 可选的额外初始状态字段，用于正式 run 传入已解析的 persona/task/record。
+    """
 
     graph = build_run_graph(load_context_node)
     initial_state: RunState = {
@@ -733,6 +737,8 @@ async def run_workflow(
         "screenshot_dir": screenshot_dir,
         "session_box": {},
     }
+    if extra_initial_state:
+        initial_state.update(extra_initial_state)
 
     try:
         return await graph.ainvoke(initial_state)
