@@ -29,6 +29,7 @@ class Settings(BaseModel):
     demo_site_dir: Path
     screenshot_dir: Path
     database_url: Path
+    cors_origins: list[str]
     custom_system_prompt: str
     model_provider: str
     base_url: str
@@ -57,6 +58,7 @@ def get_settings() -> Settings:
         demo_site_dir=BASE_DIR / "backend" / "fixtures" / "demo_site",
         screenshot_dir=BASE_DIR / "screenshots",
         database_url=Path(os.getenv("SYNTHETIC_USER_LAB_DATABASE_URL", str(BASE_DIR / "data" / "synthetic_user_lab.db"))),
+        cors_origins=[s.strip() for s in os.getenv("SYNTHETIC_USER_LAB_CORS_ORIGINS", "http://localhost:5173").split(",") if s.strip()],
         custom_system_prompt=os.getenv("CUSTOM_SYSTEM_PROMPT", ""),
         model_provider=model_router.model_provider,
         base_url=model_router.base_url,
