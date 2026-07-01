@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from backend.execution.action_guard import is_destructive_action
 from backend.schemas.run_schemas import (
     AbandonPayload,
     ActionInput,
@@ -22,6 +23,7 @@ from backend.schemas.run_schemas import (
     UploadActionPayload,
     WaitActionPayload,
 )
+from backend.schemas.task_schemas import Task
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +66,19 @@ async def close_browser_session(session: dict[str, Any] | None) -> None:
 TERMINAL_ACTIONS = {"ask_for_help", "abandon"}
 
 
-async def execute_action(page: Any, action: ActionInput) -> ExecutionResult:
+async def execute_action(page: Any, action: ActionInput, task: Task) -> ExecutionResult:
     """执行单个受控动作并返回结果。"""
+
+    # 安全护栏：检查高风险动作
+    is_destructive, reason = is_destructive_action(action, task)
+    if is_destructive:
+        logger.warning("Action blocked by safety guard: %s", reason)
+        return ExecutionResult(
+            action=action.action,
+            success=False,
+            detail=f"动作被安全护栏阻断：{reason}",
+            error_message=reason,
+        )
 
     payload = action.payload
     try:

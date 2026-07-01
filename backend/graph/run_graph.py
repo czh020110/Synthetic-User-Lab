@@ -290,10 +290,11 @@ async def execute_current_action(state: RunState) -> dict:
 
     session = state.get("session")
     action = state.get("current_action")
+    task = state.get("task")
     before_page_state = state.get("current_page_state")
     current_step_index = state.get("current_step_index", 0)
-    if session is None or action is None or before_page_state is None:
-        raise ValueError("Session, action, or page state is missing before action execution.")
+    if session is None or action is None or task is None or before_page_state is None:
+        raise ValueError("Session, action, task, or page state is missing before action execution.")
 
     page = session["page"]
     step_index = current_step_index + 1
@@ -302,7 +303,7 @@ async def execute_current_action(state: RunState) -> dict:
     before_screenshot_path.parent.mkdir(parents=True, exist_ok=True)
     await page.screenshot(path=str(before_screenshot_path), full_page=True)
 
-    result = await execute_action(page, action)
+    result = await execute_action(page, action, task)
     return {
         "current_execution_result": result,
         "step_before_page_state": step_before_page_state,
