@@ -47,9 +47,9 @@ def test_mvp_personas_diversity():
     personas = get_mvp_personas()
 
     names = [p.name for p in personas]
-    assert "新手用户小明" in names
-    assert "专家用户李工" in names
-    assert "老年用户王阿姨" in names
+    assert "新手用户" in names
+    assert "专家用户" in names
+    assert "老年用户" in names
 
     # 验证技能水平差异
     skill_levels = [p.skill_level for p in personas]

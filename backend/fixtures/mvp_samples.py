@@ -6,7 +6,7 @@ from backend.schemas.task_schemas import Task, TaskCreate
 # ============================ Persona 样例 ============================ #
 
 PERSONA_NEWBIE = PersonaCreate(
-    name="新手用户小明",
+    name="新手用户",
     description=(
         "22岁大学生，首次使用类似产品，不熟悉行业术语。"
         "操作习惯：倾向于点击醒目按钮，不太会主动寻找帮助文档，遇到复杂表单容易放弃。"
@@ -18,7 +18,7 @@ PERSONA_NEWBIE = PersonaCreate(
 )
 
 PERSONA_EXPERT = PersonaCreate(
-    name="专家用户李工",
+    name="专家用户",
     description=(
         "35岁互联网从业者，熟悉各类产品，追求效率。"
         "操作习惯：优先使用快捷键和批量操作，会主动查找高级功能，不喜欢冗余提示。"
@@ -30,7 +30,7 @@ PERSONA_EXPERT = PersonaCreate(
 )
 
 PERSONA_ELDERLY = PersonaCreate(
-    name="老年用户王阿姨",
+    name="老年用户",
     description=(
         "62岁退休人员，智能手机使用经验有限，容易误触。"
         "操作习惯：反应较慢，需要多次确认，容易点错按钮，不熟悉滚动和拖拽操作。"
