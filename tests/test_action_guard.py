@@ -108,11 +108,11 @@ def test_click_destructive_button_blocked():
     destructive_selectors = [
         "button:has-text('Delete Account')",
         "button:has-text('删除')",
-        "button:has-text('Submit Payment')",
+        "button:has-text('Pay Now')",
         "button:has-text('确认支付')",
         "button:has-text('Publish')",
         "button:has-text('发布')",
-        "a[href='/cancel-subscription']",
+        "a[href='/unsubscribe']",
         "button[data-action='checkout']",
     ]
 
@@ -184,3 +184,130 @@ def test_wait_action_always_allowed():
 
     is_destructive, reason = is_destructive_action(action, task)
     assert not is_destructive
+
+
+def test_click_normal_submit_confirm_cancel_allowed():
+    """普通提交/确认/取消按钮不应被误伤（避免阻断正常表单流程）。"""
+    task = Task(
+        start_url="https://example.com",
+        destructive_action_allowed=False,
+    )
+
+    # demo 站点核心 selector，必须放行
+    normal_selectors = [
+        "#btn-submit-form",
+        "#s2-submit",
+        "#btn-confirm",
+        "#modal-confirm",
+        "#btn-cancel",
+        "#modal-cancel",
+        "button:has-text('确认完成')",
+        "button:has-text('提交表单')",
+        "button:has-text('取消任务')",
+    ]
+
+    for selector in normal_selectors:
+        action = ActionInput(
+            action="click",
+            payload=ClickActionPayload(selector=selector),
+        )
+        is_destructive, _ = is_destructive_action(action, task)
+        assert not is_destructive, f"Normal selector '{selector}' should not be blocked"
+
+
+def test_navigate_substring_bypass_blocked():
+    """域名白名单应使用精确匹配，不能被子字符串绕过。"""
+    task = Task(
+        start_url="https://app.example.com",
+        destructive_action_allowed=False,
+    )
+
+    bypass_urls = [
+        "https://example.com.evil.org",
+        "https://not-test.com",
+        "https://evil.testing.com",
+        "https://example.com.attacker.io",
+    ]
+
+    for url in bypass_urls:
+        action = ActionInput(
+            action="navigate",
+            payload=NavigateActionPayload(url=url),
+        )
+        is_destructive, reason = is_destructive_action(action, task)
+        assert is_destructive, f"URL {url} should be blocked (substring bypass)"
+
+
+def test_navigate_subdomain_of_safe_domain_allowed():
+    """安全域名的子域应被放行。"""
+    task = Task(
+        start_url="https://example.com",
+        destructive_action_allowed=False,
+    )
+
+    subdomain_urls = [
+        "https://demo.example.com",
+        "https://staging.example.com",
+        "https://api.test.com",
+    ]
+
+    for url in subdomain_urls:
+        action = ActionInput(
+            action="navigate",
+            payload=NavigateActionPayload(url=url),
+        )
+        is_destructive, _ = is_destructive_action(action, task)
+        assert not is_destructive, f"Subdomain URL {url} should be allowed"
+
+
+def test_navigate_localhost_allowed():
+    """本地开发域名应被放行。"""
+    task = Task(
+        start_url="https://example.com",
+        destructive_action_allowed=False,
+    )
+
+    local_urls = [
+        "http://localhost:3000",
+        "http://127.0.0.1:8080",
+        "http://0.0.0.0:8000",
+    ]
+
+    for url in local_urls:
+        action = ActionInput(
+            action="navigate",
+            payload=NavigateActionPayload(url=url),
+        )
+        is_destructive, _ = is_destructive_action(action, task)
+        assert not is_destructive, f"Local URL {url} should be allowed"
+
+
+def test_navigate_demo_run_app_base_url_allowed():
+    """demo run 的 app_base_url 同域导航应被放行。"""
+    task = Task(
+        start_url="http://127.0.0.1:8765/demo/index.html",
+        destructive_action_allowed=False,
+    )
+
+    action = ActionInput(
+        action="navigate",
+        payload=NavigateActionPayload(url="http://127.0.0.1:8765/demo/step2.html"),
+    )
+    is_destructive, _ = is_destructive_action(action, task)
+    assert not is_destructive
+
+
+def test_fill_demo_site_password_field_blocked():
+    """demo 站点的密码字段填写应被阻断。"""
+    task = Task(
+        start_url="https://example.com",
+        destructive_action_allowed=False,
+    )
+
+    action = ActionInput(
+        action="fill",
+        payload=FillActionPayload(selector="#fill-pwd", value="test_password"),
+    )
+    is_destructive, reason = is_destructive_action(action, task)
+    assert is_destructive
+    assert "敏感字段" in reason

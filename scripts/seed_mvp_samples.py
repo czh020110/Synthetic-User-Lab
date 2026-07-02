@@ -42,8 +42,8 @@ async def seed_mvp_samples() -> None:
             print(f"  ⏭️  Persona '{persona_create.name}' 已存在，跳过")
             continue
 
-        # 转换为 Persona 实体
-        persona = Persona(**persona_create.model_dump())
+        # 转换为 Persona 实体（依赖 Persona 的 id/created_at/updated_at 默认值）
+        persona = Persona.model_validate(persona_create.model_dump())
         persona = entity_store.create_persona(persona)
         print(f"  ✅ 创建 Persona: {persona.name} (ID: {persona.id})")
         created_personas += 1
@@ -59,8 +59,8 @@ async def seed_mvp_samples() -> None:
             print(f"  ⏭️  Task '{task_create.name}' 已存在，跳过")
             continue
 
-        # 转换为 Task 实体
-        task = Task(**task_create.model_dump())
+        # 转换为 Task 实体（依赖 Task 的 id/created_at/updated_at 默认值）
+        task = Task.model_validate(task_create.model_dump())
         task = entity_store.create_task(task)
         print(f"  ✅ 创建 Task: {task.name} (ID: {task.id})")
         created_tasks += 1

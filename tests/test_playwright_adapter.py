@@ -292,3 +292,30 @@ async def test_execute_upload_with_file_paths_uses_original_logic() -> None:
     assert result.success is True
     page.locator.assert_called_once_with("#file-input")
     page.locator.return_value.set_input_files.assert_awaited_once_with(["/tmp/test.pdf"])
+
+
+def _make_strict_task() -> Task:
+    """destructive_action_allowed=False 的严格 task，用于验证护栏集成。"""
+    return Task(
+        start_url="https://example.com",
+        destructive_action_allowed=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_action_blocked_by_guard_returns_failure() -> None:
+    """护栏阻断高风险动作时应返回结构正确的失败结果，且不触碰浏览器。"""
+    page = _make_fake_page()
+    action = ActionInput(
+        action="click",
+        payload=ClickActionPayload(selector="button:has-text('Delete Account')"),
+        reason="test",
+    )
+    result = await execute_action(page, action, _make_strict_task())
+    assert result.success is False
+    assert result.action == "click"
+    assert "安全护栏" in result.detail
+    assert result.error_message
+    # 护栏阻断后不应触发任何浏览器交互
+    page.locator.assert_not_called()
+    page.goto.assert_not_awaited()
