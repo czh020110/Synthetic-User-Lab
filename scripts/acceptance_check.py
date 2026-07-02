@@ -1,0 +1,543 @@
+#!/usr/bin/env python3
+"""MVP 端到端验收脚本。
+
+覆盖 S-005 两条验收路径：
+  1. Demo Run 闭环：POST /runs/demo/start → status → steps → report → markdown
+  2. 正式 Run 闭环：seed MVP 样例 → POST /runs/start → status → steps → report → markdown
+并附带真实验证动作安全护栏（S-005 安全边界目标）。
+
+设计说明：
+  真实 run workflow 依赖 LLM + Playwright，无法在 CI 稳定复跑。本脚本在 workflow
+  入口注入受控剧本（写入真实 StepLog 并调用 run_store.complete_run），使 API → store
+  → 报告 → Markdown 查询链路得到端到端覆盖，同时保留可解释的步骤证据。安全护栏
+  不依赖 LLM，直接调用 is_destructive_action 真实验证。
+
+使用方式：
+    python scripts/acceptance_check.py
+    python scripts/acceptance_check.py --keep-reports  # 保留历史验收报告
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import sys
+import traceback
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import patch
+
+# 添加项目根目录到 sys.path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from fastapi.testclient import TestClient
+
+from backend.execution.action_guard import is_destructive_action
+from backend.fixtures.mvp_samples import get_mvp_personas, get_mvp_tasks
+from backend.main import app
+from backend.schemas.persona_schemas import Persona
+from backend.schemas.run_schemas import (
+    AbandonPayload,
+    ActionInput,
+    ClickActionPayload,
+    ExecutionResult,
+    FillActionPayload,
+    NavigateActionPayload,
+    ObservedPageState,
+    RetrievedContextItem,
+    RunRecord,
+    RunRequest,
+    StepLog,
+    Task,
+    ValidationResult,
+)
+from backend.stores import get_entity_store, get_run_store
+
+client = TestClient(app)
+REPORT_DIR = project_root / "acceptance_reports"
+
+
+# ============================ 验收结果收集 ============================ #
+
+
+@dataclass
+class CheckResult:
+    name: str
+    passed: bool
+    detail: str = ""
+
+
+@dataclass
+class AcceptanceReport:
+    started_at: str
+    finished_at: str = ""
+    results: list[CheckResult] = field(default_factory=list)
+    demo_run_id: str | None = None
+    formal_run_id: str | None = None
+    demo_markdown: str | None = None
+    formal_markdown: str | None = None
+
+    @property
+    def total(self) -> int:
+        return len(self.results)
+
+    @property
+    def passed_count(self) -> int:
+        return sum(1 for r in self.results if r.passed)
+
+    @property
+    def failed_count(self) -> int:
+        return self.total - self.passed_count
+
+    @property
+    def all_passed(self) -> bool:
+        return self.failed_count == 0
+
+
+def record(report: AcceptanceReport, name: str, condition: bool, detail: str = "") -> None:
+    report.results.append(CheckResult(name=name, passed=bool(condition), detail=detail))
+    flag = "PASS" if condition else "FAIL"
+    print(f"  [{flag}] {name}{(' — ' + detail) if detail and not condition else ''}")
+
+
+# ============================ 受控 workflow 剧本 ============================ #
+# 用确定性步骤代替真实 LLM 决策，写入真实 StepLog 并完成 run，
+# 使 API → store → 报告 → Markdown 查询链路得到端到端覆盖。
+
+_DEMO_START_URL = "http://testserver/demo/index.html"
+
+
+def _make_page_state(text: str, screenshot: str) -> ObservedPageState:
+    return ObservedPageState(
+        current_url=_DEMO_START_URL,
+        title="demo 动作验证",
+        visible_text_summary=text,
+        screenshot_path=screenshot,
+    )
+
+
+def _build_scripted_steps(run_id: str, success: bool) -> list[StepLog]:
+    """构造两步确定性步骤证据：navigate 进入 → click 完成（成功）或 abandon（失败）。"""
+
+    retrieval_context = [
+        RetrievedContextItem(
+            source_type="product_knowledge",
+            title="任务完成标准",
+            content="页面显示成功卡片且计数器大于 0 时判定为完成。",
+            source_ref="acceptance:success_criteria",
+        ),
+    ]
+    step1 = StepLog(
+        step_index=1,
+        observed_page_state=_make_page_state("起始页面，计数器为 0", f"screenshots/{run_id}/step-1-before.png"),
+        decided_action=ActionInput(
+            action="navigate",
+            payload=NavigateActionPayload(url=_DEMO_START_URL),
+            reason="进入任务起始页",
+        ),
+        execution_result=ExecutionResult(action="navigate", success=True, detail="动作 navigate 执行成功。"),
+        validation_result=ValidationResult(
+            status="running",
+            should_stop=False,
+            progress_summary="已进入起始页面，准备执行核心动作。",
+        ),
+        post_action_page_state=_make_page_state("已进入起始页", f"screenshots/{run_id}/step-1-after.png"),
+        retrieval_context=retrieval_context,
+    )
+    if success:
+        step2 = StepLog(
+            step_index=2,
+            observed_page_state=_make_page_state("点击前计数器为 0", f"screenshots/{run_id}/step-2-before.png"),
+            decided_action=ActionInput(
+                action="click",
+                payload=ClickActionPayload(
+                    selector="#btn-counter-increment"
+                ),
+                reason="点击 +1 按钮增加计数器",
+            ),
+            execution_result=ExecutionResult(action="click", success=True, detail="动作 click 执行成功。"),
+            validation_result=ValidationResult(
+                status="succeeded",
+                should_stop=True,
+                progress_summary="计数器增加且成功卡片可见，任务完成。",
+                detected_success=True,
+            ),
+            post_action_page_state=_make_page_state("成功卡片可见，计数器为 1", f"screenshots/{run_id}/step-2-after.png"),
+            retrieval_context=retrieval_context,
+        )
+    else:
+        step2 = StepLog(
+            step_index=2,
+            observed_page_state=_make_page_state("点击前计数器为 0", f"screenshots/{run_id}/step-2-before.png"),
+            decided_action=ActionInput(
+                action="abandon",
+                payload=AbandonPayload(
+                    reason="找不到可用入口"
+                ),
+                reason="无法定位可用按钮",
+            ),
+            execution_result=ExecutionResult(action="abandon", success=True, detail="动作 abandon 执行成功。"),
+            validation_result=ValidationResult(
+                status="failed",
+                should_stop=True,
+                progress_summary="未找到可用入口，任务被放弃。",
+                detected_error=True,
+            ),
+            post_action_page_state=_make_page_state("放弃任务", f"screenshots/{run_id}/step-2-after.png"),
+            retrieval_context=retrieval_context,
+        )
+    return [step1, step2]
+
+
+async def _scripted_demo_workflow(run_id: str, **_kwargs) -> None:
+    """受控 demo workflow：写入真实步骤证据并完成 run。"""
+
+    from backend.analysis.report_builder import build_run_report_async
+
+    run_store = get_run_store()
+    record = run_store.get_record(run_id)
+    if record is None:
+        record = RunRecord(
+            run_id=run_id,
+            request=RunRequest(run_name="acceptance-demo"),
+            persona=Persona(name="验收 demo persona"),
+            task=Task(start_url=_DEMO_START_URL),
+        )
+        run_store.create_run(record)
+    run_store.mark_running(run_id)
+    steps = _build_scripted_steps(run_id, success=True)
+    for step in steps:
+        run_store.add_step(run_id, step)
+    report = await build_run_report_async(record, steps)
+    run_store.complete_run(run_id, report)
+
+
+async def _scripted_formal_workflow(run_id: str, **_kwargs) -> None:
+    """受控 formal workflow：写入真实步骤证据并完成 run。"""
+
+    from backend.analysis.report_builder import build_run_report_async
+
+    run_store = get_run_store()
+    record = run_store.get_record(run_id)
+    if record is None:
+        raise ValueError("formal run record must be created by API before workflow")
+    run_store.mark_running(run_id)
+    steps = _build_scripted_steps(run_id, success=True)
+    for step in steps:
+        run_store.add_step(run_id, step)
+    report = await build_run_report_async(record, steps)
+    run_store.complete_run(run_id, report)
+
+
+# ============================ 验收步骤 ============================ #
+
+
+def _reset_stores() -> None:
+    """清空 store，保证验收可重复运行。"""
+
+    get_entity_store().clear()
+    get_run_store().clear()
+
+
+def _seed_mvp_samples() -> tuple[str, str]:
+    """通过 API 创建 MVP 样例 persona/task，返回 (persona_id, task_id)。"""
+
+    persona_payload = get_mvp_personas()[0].model_dump()
+    task_payload = get_mvp_tasks()[0].model_dump()
+    persona_resp = client.post("/api/v1/personas/", json=persona_payload)
+    assert persona_resp.status_code == 200, persona_resp.text
+    task_resp = client.post("/api/v1/tasks/", json=task_payload)
+    assert task_resp.status_code == 200, task_resp.text
+    return persona_resp.json()["data"]["id"], task_resp.json()["data"]["id"]
+
+
+def check_demo_run_path(report: AcceptanceReport) -> None:
+    """验收路径 1：Demo Run 闭环。"""
+
+    print("\n[路径 1] Demo Run 端到端闭环")
+    with patch("backend.api.routes.demo_runs.run_demo_workflow", new=_scripted_demo_workflow):
+        start_resp = client.post("/api/v1/runs/demo/start", json={"run_name": "acceptance-demo", "headless": True})
+    record(report, "POST /runs/demo/start 返回 200 + run_id", start_resp.status_code == 200)
+    start_data = start_resp.json().get("data", {})
+    run_id = start_data.get("run_id")
+    report.demo_run_id = run_id
+    record(report, "启动状态为 queued", start_data.get("status") == "queued", f"status={start_data.get('status')}")
+
+    if run_id is None:
+        record(report, "获取 demo run_id", False, "启动响应缺失 run_id")
+        return
+
+    # 受控 workflow 在后台 task 中执行；TestClient 同步上下文需等待其完成
+    _drain_demo_background_tasks()
+
+    status_resp = client.get(f"/api/v1/runs/demo/{run_id}")
+    status_data = status_resp.json().get("data", {})
+    record(report, "GET status 返回 200", status_resp.status_code == 200)
+    record(report, "最终状态为 succeeded", status_data.get("status") == "succeeded", f"status={status_data.get('status')}")
+
+    steps_resp = client.get(f"/api/v1/runs/demo/{run_id}/steps")
+    steps_data = steps_resp.json().get("data", [])
+    record(report, "GET steps 返回 200", steps_resp.status_code == 200)
+    record(report, "steps 包含 2 条步骤日志", len(steps_data) == 2, f"len={len(steps_data)}")
+    if steps_data:
+        record(
+            report,
+            "步骤日志含动作前/后截图路径",
+            steps_data[0]["before_page_state"]["screenshot_path"].endswith("step-1-before.png")
+            and steps_data[1]["after_page_state"]["screenshot_path"].endswith("step-2-after.png"),
+        )
+
+    report_resp = client.get(f"/api/v1/runs/demo/{run_id}/report")
+    report_data = report_resp.json().get("data", {})
+    record(report, "GET report 返回 200", report_resp.status_code == 200)
+    record(report, "报告 conclusion=keep", report_data.get("conclusion") == "keep", f"conclusion={report_data.get('conclusion')}")
+    record(report, "报告 total_steps=2", report_data.get("total_steps") == 2, f"total_steps={report_data.get('total_steps')}")
+    record(report, "报告含结构化事实 structured_facts", bool(report_data.get("structured_facts")))
+
+    md_resp = client.get(f"/api/v1/runs/demo/{run_id}/report/markdown")
+    md_text = md_resp.json().get("data", {}).get("markdown", "")
+    report.demo_markdown = md_text
+    record(report, "GET report/markdown 返回 200", md_resp.status_code == 200)
+    record(report, "Markdown 含执行摘要与步骤明细", "## 执行摘要" in md_text and "## 步骤明细" in md_text)
+
+
+def check_formal_run_path(report: AcceptanceReport) -> None:
+    """验收路径 2：正式 Run 闭环（seed MVP 样例 → 启动 → 查询）。"""
+
+    print("\n[路径 2] 正式 Run 端到端闭环")
+    persona_id, task_id = _seed_mvp_samples()
+    record(report, "通过 API 创建 MVP persona/task", bool(persona_id and task_id))
+
+    with patch("backend.api.routes.runs.run_formal_workflow", new=_scripted_formal_workflow):
+        start_resp = client.post(
+            "/api/v1/runs/start",
+            json={"persona_id": persona_id, "task_id": task_id, "run_name": "acceptance-formal"},
+        )
+    record(report, "POST /runs/start 返回 200 + run_id", start_resp.status_code == 200, start_resp.text)
+    start_data = start_resp.json().get("data", {})
+    run_id = start_data.get("run_id")
+    report.formal_run_id = run_id
+
+    if run_id is None:
+        record(report, "获取 formal run_id", False, "启动响应缺失 run_id")
+        return
+
+    _drain_formal_background_tasks()
+
+    status_resp = client.get(f"/api/v1/runs/{run_id}")
+    status_data = status_resp.json().get("data", {})
+    record(report, "GET status 返回 200 + succeeded", status_resp.status_code == 200 and status_data.get("status") == "succeeded")
+
+    steps_resp = client.get(f"/api/v1/runs/{run_id}/steps")
+    record(report, "GET steps 返回 200", steps_resp.status_code == 200)
+    record(report, "steps 含 2 条证据", len(steps_resp.json().get("data", [])) == 2)
+
+    report_resp = client.get(f"/api/v1/runs/{run_id}/report")
+    report_data = report_resp.json().get("data", {})
+    record(report, "GET report 返回 200", report_resp.status_code == 200)
+    record(report, "报告绑定正式 persona/task", report_data.get("persona", {}).get("name") == "新手用户")
+    record(report, "报告 conclusion=keep", report_data.get("conclusion") == "keep")
+
+    md_resp = client.get(f"/api/v1/runs/{run_id}/report/markdown")
+    report.formal_markdown = md_resp.json().get("data", {}).get("markdown", "")
+    record(report, "GET report/markdown 返回 200", md_resp.status_code == 200)
+
+    list_resp = client.get("/api/v1/runs/")
+    record(report, "GET /runs 列表返回 200", list_resp.status_code == 200)
+    record(report, "列表包含本次 formal run", any(r.get("run_id") == run_id for r in list_resp.json().get("data", [])))
+
+
+def check_error_branches(report: AcceptanceReport) -> None:
+    """验收错误分支：404 不存在 / 409 报告未就绪。"""
+
+    print("\n[路径 3] 错误分支与友好提示")
+    not_found = client.get("/api/v1/runs/nonexistent-run")
+    record(report, "查询不存在 run 返回 404", not_found.status_code == 404, f"code={not_found.status_code}")
+
+    # 创建一个 queued 但后台 workflow 不构建报告的 run，验证 409。
+    # 与 tests/test_formal_run_api.py::test_get_run_report_not_ready 一致：workflow 立即返回，
+    # 既不 complete_run 也不构建报告，因此 run 处于未完成态、报告缺失 → 409。
+    async def _noop_workflow(run_id: str, **_kwargs) -> None:
+        return None
+
+    entity_store = get_entity_store()
+    persona = Persona(name="错误分支 persona")
+    entity_store.create_persona(persona)
+    task = Task(start_url="http://example.com", max_steps=5)
+    entity_store.create_task(task)
+    with patch("backend.api.routes.runs.run_formal_workflow", new=_noop_workflow):
+        start_resp = client.post("/api/v1/runs/start", json={"persona_id": persona.id, "task_id": task.id})
+    run_id = start_resp.json()["data"]["run_id"]
+    _drain_formal_background_tasks()
+
+    early_report = client.get(f"/api/v1/runs/{run_id}/report")
+    record(report, "run 报告未就绪时返回 409", early_report.status_code == 409, f"code={early_report.status_code}")
+
+
+def check_safety_guard(report: AcceptanceReport) -> None:
+    """真实验证动作安全护栏（S-005 安全边界目标）。"""
+
+    print("\n[路径 4] 动作安全护栏")
+    task = Task(start_url="https://example.com", destructive_action_allowed=False)
+
+    # 高风险点击应被阻断
+    click_blocked, _ = is_destructive_action(
+        ActionInput(action="click", payload=ClickActionPayload(selector="button:has-text('Delete Account')")),
+        task,
+    )
+    record(report, "高风险点击被护栏阻断", click_blocked)
+
+    # 敏感字段填写应被阻断
+    fill_blocked, _ = is_destructive_action(
+        ActionInput(action="fill", payload=FillActionPayload(selector="input[name='password']", value="x")),
+        task,
+    )
+    record(report, "敏感字段填写被护栏阻断", fill_blocked)
+
+    # 非白名单域名导航应被阻断
+    nav_blocked, _ = is_destructive_action(
+        ActionInput(action="navigate", payload=NavigateActionPayload(url="https://malicious.com")),
+        task,
+    )
+    record(report, "非白名单域名导航被阻断", nav_blocked)
+
+    # 安全动作不应被误伤
+    safe_ok, _ = is_destructive_action(
+        ActionInput(action="click", payload=ClickActionPayload(selector="#btn-submit-form")),
+        task,
+    )
+    record(report, "普通提交按钮不被误伤", not safe_ok)
+
+    # destructive_action_allowed=True 时放行
+    task_allowed = Task(start_url="https://example.com", destructive_action_allowed=True)
+    allowed_ok, _ = is_destructive_action(
+        ActionInput(action="click", payload=ClickActionPayload(selector="button:has-text('Delete Account')")),
+        task_allowed,
+    )
+    record(report, "destructive_action_allowed=True 时放行", not allowed_ok)
+
+
+# ============================ 后台任务排空 ============================ #
+
+
+def _drain_demo_background_tasks() -> None:
+    import backend.api.routes.demo_runs as demo_runs
+
+    async def _wait() -> None:
+        while demo_runs._background_tasks:
+            await asyncio.sleep(0)
+
+    asyncio.run(_wait())
+
+
+def _drain_formal_background_tasks() -> None:
+    import backend.api.routes.runs as runs
+
+    async def _wait() -> None:
+        while runs._background_tasks:
+            await asyncio.sleep(0)
+
+    asyncio.run(_wait())
+
+
+# ============================ 验收报告渲染 ============================ #
+
+
+def _render_acceptance_report(report: AcceptanceReport) -> str:
+    """渲染 Markdown 验收报告。"""
+
+    lines: list[str] = []
+    lines.append("# Synthetic User Lab MVP 验收报告\n")
+    lines.append(f"- **开始时间**: {report.started_at}")
+    lines.append(f"- **结束时间**: {report.finished_at}")
+    lines.append(f"- **用例总数**: {report.total}")
+    lines.append(f"- **通过**: {report.passed_count}")
+    lines.append(f"- **失败**: {report.failed_count}")
+    lines.append(f"- **整体结论**: {'PASS' if report.all_passed else 'FAIL'}")
+    if report.demo_run_id:
+        lines.append(f"- **Demo Run ID**: {report.demo_run_id}")
+    if report.formal_run_id:
+        lines.append(f"- **Formal Run ID**: {report.formal_run_id}")
+    lines.append("")
+
+    lines.append("## 用例明细\n")
+    lines.append("| # | 用例 | 结果 |")
+    lines.append("|---|------|------|")
+    for idx, r in enumerate(report.results, 1):
+        flag = "PASS" if r.passed else "FAIL"
+        lines.append(f"| {idx} | {r.name} | {flag} |")
+    lines.append("")
+
+    if report.demo_markdown:
+        lines.append("## Demo Run Markdown 报告（节选）\n")
+        lines.append("````markdown")
+        snippet = report.demo_markdown[:1500]
+        lines.append(snippet + ("\n...（已截断）" if len(report.demo_markdown) > 1500 else ""))
+        lines.append("````")
+        lines.append("")
+
+    if report.formal_markdown:
+        lines.append("## Formal Run Markdown 报告（节选）\n")
+        lines.append("````markdown")
+        snippet = report.formal_markdown[:1500]
+        lines.append(snippet + ("\n...（已截断）" if len(report.formal_markdown) > 1500 else ""))
+        lines.append("````")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+# ============================ 主入口 ============================ #
+
+
+def run_acceptance() -> AcceptanceReport:
+    """执行全部验收用例。"""
+
+    _reset_stores()
+    report = AcceptanceReport(started_at=datetime.now(timezone.utc).isoformat())
+    print("Synthetic User Lab MVP 验收开始\n" + "=" * 50)
+
+    try:
+        check_demo_run_path(report)
+        check_formal_run_path(report)
+        check_error_branches(report)
+        check_safety_guard(report)
+    except Exception as exc:  # noqa: BLE001 - 验收脚本需捕获中断并记录
+        traceback.print_exc()
+        record(report, "验收流程未中断", False, f"{type(exc).__name__}: {exc}")
+
+    report.finished_at = datetime.now(timezone.utc).isoformat()
+    _reset_stores()
+    return report
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="MVP 端到端验收脚本")
+    parser.add_argument("--keep-reports", action="store_true", help="保留历史验收报告，不清理目录")
+    args = parser.parse_args()
+
+    report = run_acceptance()
+
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    if not args.keep_reports:
+        for old in REPORT_DIR.glob("acceptance-*.md"):
+            old.unlink()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    report_path = REPORT_DIR / f"acceptance-{stamp}.md"
+    report_path.write_text(_render_acceptance_report(report), encoding="utf-8")
+    latest_path = REPORT_DIR / "latest.md"
+    latest_path.write_text(_render_acceptance_report(report), encoding="utf-8")
+
+    print("\n" + "=" * 50)
+    print(f"验收完成：{report.passed_count}/{report.total} 通过，{report.failed_count} 失败")
+    print(f"验收报告已写入: {report_path}")
+    print(f"最新报告副本: {latest_path}")
+
+    # 退出码：全部通过返回 0，便于 CI 判定
+    return 0 if report.all_passed else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

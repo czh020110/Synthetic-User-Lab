@@ -56,6 +56,9 @@ Thumbs.db
 
 screenshots/
 
+# 验收脚本运行产物（latest.md 与带时间戳的报告）
+acceptance_reports/
+
 .claude/settings.local.json
 .claude/.cache/
 .codegraph/
