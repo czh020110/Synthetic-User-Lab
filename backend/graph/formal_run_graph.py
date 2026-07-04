@@ -12,7 +12,7 @@ from backend.graph.run_graph import build_run_graph, create_run_agents, run_work
 from backend.graph.run_state import RunState
 from backend.retrieval import build_retrieval_context
 from backend.schemas.run_schemas import Persona, RunRecord, RunRequest, Task
-from backend.stores import get_run_store
+from backend.stores import get_run_store, get_entity_store
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ async def load_formal_context(state: RunState) -> dict:
     if record is None:
         raise ValueError("Run record must be created before formal run context loading.")
 
-    retrieval_context = build_retrieval_context(persona, task)
+    retrieval_context = build_retrieval_context(persona, task, entity_store=get_entity_store())
     decide_agent, validate_agent, wait_agent = create_run_agents(persona, task)
     run_store.mark_running(record.run_id)
     return {

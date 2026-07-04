@@ -12,6 +12,7 @@ from backend.schemas.run_schemas import (
     StepLog,
     Task,
 )
+from backend.stores.entity_store_protocol import EntityStore
 
 
 @dataclass(frozen=True)
@@ -65,16 +66,26 @@ _FAILURE_CASES: tuple[FailureCaseSeed, ...] = (
 def retrieve_failure_cases(
     friction_signals: list[str],
     step_logs: list[StepLog],
+    *,
+    entity_store: EntityStore | None = None,
 ) -> list[RetrievedContextItem]:
-    """根据当前摩擦信号与执行历史，检索相似失败案例与恢复建议。"""
+    """根据当前摩擦信号与执行历史，检索相似失败案例与恢复建议。
 
-    if not friction_signals:
+    当 entity_store 提供时，优先从其中查询真实 failure_case 条目。
+    空库或提供 None 时回退到硬编码种子。
+    """
+
+    if not friction_signals and not step_logs:
         return []
 
-    query_text = _build_failure_query(friction_signals, step_logs)
-    matched: list[tuple[int, FailureCaseSeed]] = []
+    seeds = list(_FAILURE_CASES)
+    if entity_store is not None:
+        seeds = _merge_failure_case_seeds(seeds, entity_store)
 
-    for seed in _FAILURE_CASES:
+    query_text = _build_failure_query(friction_signals, step_logs)
+
+    matched: list[tuple[int, FailureCaseSeed | _EntityFailureCase]] = []
+    for seed in seeds:
         if seed.error_pattern in friction_signals:
             matched.append((10, seed))
             continue
@@ -85,12 +96,7 @@ def retrieve_failure_cases(
     matched.sort(key=lambda item: -item[0])
 
     return [
-        RetrievedContextItem(
-            source_type="failure_case",
-            title=f"失败案例: {seed.symptom}",
-            content=f"症状: {seed.symptom}。建议恢复动作: {seed.recovery_action} — {seed.recovery_description}。",
-            source_ref=f"seed:failure_recovery:{seed.error_pattern}",
-        )
+        _to_retrieved_item(seed)
         for _, seed in matched
     ]
 
@@ -100,14 +106,23 @@ def choose_recovery_action(
     friction_signals: list[str],
     step_logs: list[StepLog],
     recovery_history: list[dict],
+    *,
+    entity_store: EntityStore | None = None,
 ) -> ActionInput:
-    """根据失败案例检索结果与恢复历史，选择受控恢复动作。"""
+    """根据失败案例检索结果与恢复历史，选择受控恢复动作。
+
+    当 entity_store 提供时，从真实知识库读取失败案例，合并硬编码种子后择优。
+    """
 
     attempted_patterns = {entry.get("error_pattern") for entry in recovery_history}
 
+    seeds = list(_FAILURE_CASES)
+    if entity_store is not None:
+        seeds = _merge_failure_case_seeds(seeds, entity_store)
+
     query_text = _build_failure_query(friction_signals, step_logs)
-    candidates: list[tuple[int, FailureCaseSeed]] = []
-    for seed in _FAILURE_CASES:
+    candidates: list[tuple[int, FailureCaseSeed | _EntityFailureCase]] = []
+    for seed in seeds:
         if seed.error_pattern in friction_signals:
             candidates.append((10, seed))
         elif any(kw in query_text for kw in seed.keywords):
@@ -135,19 +150,58 @@ def choose_recovery_action(
     )
 
 
-def _build_failure_query(friction_signals: list[str], step_logs: list[StepLog]) -> str:
-    parts = list(friction_signals)
-    if step_logs:
-        last = step_logs[-1]
-        parts.append(last.decided_action.action)
-        if last.execution_result.error_message:
-            parts.append(last.execution_result.error_message)
-        if last.validation_result.progress_summary:
-            parts.append(last.validation_result.progress_summary)
-    return " ".join(parts).lower()
+# ============================ Helpers ============================ #
 
 
-def _build_recovery_action(task: Task, seed: FailureCaseSeed) -> ActionInput:
+@dataclass(frozen=True)
+class _EntityFailureCase:
+    """轻量适配类型，将 entity_store 的 FailureCase 条目桥接到 FailureCaseSeed 打分逻辑。"""
+    error_pattern: str
+    symptom: str
+    recovery_action: ActionName
+    recovery_description: str
+    keywords: tuple[str, ...]
+    source_ref: str
+
+
+def _merge_failure_case_seeds(
+    seeds: list[FailureCaseSeed],
+    entity_store: EntityStore,
+) -> list[FailureCaseSeed | _EntityFailureCase]:
+    """将 entity_store 中的失败案例条目合并到硬编码种子列表中。"""
+    try:
+        items = entity_store.list_knowledge_items(source_type="failure_case")
+    except Exception:
+        return seeds
+
+    converted = [
+        _EntityFailureCase(
+            error_pattern=item.source_ref or item.id,
+            symptom=item.title,
+            recovery_action="navigate",
+            recovery_description=item.content,
+            keywords=tuple(item.keywords or ()),
+            source_ref=item.source_ref or f"entity:{item.id}",
+        )
+        for item in items
+    ]
+    return seeds + converted  # type: ignore[return-value]
+
+
+def _to_retrieved_item(seed: FailureCaseSeed | _EntityFailureCase) -> RetrievedContextItem:
+    """统一构建 RetrievedContextItem。"""
+    symptom = seed.symptom
+    recovery_action = seed.recovery_action
+    recovery_desc = seed.recovery_description
+    return RetrievedContextItem(
+        source_type="failure_case",
+        title=f"失败案例: {symptom}",
+        content=f"症状: {symptom}。建议恢复动作: {recovery_action} — {recovery_desc}。",
+        source_ref=getattr(seed, "source_ref", f"seed:failure_recovery:{seed.error_pattern}"),
+    )
+
+
+def _build_recovery_action(task: Task, seed: FailureCaseSeed | _EntityFailureCase) -> ActionInput:
     if seed.recovery_action == "navigate":
         return ActionInput(
             action="navigate",
@@ -171,3 +225,15 @@ def _build_recovery_action(task: Task, seed: FailureCaseSeed) -> ActionInput:
         payload=NavigateActionPayload(url=task.start_url),
         reason=f"恢复: {seed.recovery_description}。",
     )
+
+
+def _build_failure_query(friction_signals: list[str], step_logs: list[StepLog]) -> str:
+    parts = list(friction_signals)
+    if step_logs:
+        last = step_logs[-1]
+        parts.append(last.decided_action.action)
+        if last.execution_result.error_message:
+            parts.append(last.execution_result.error_message)
+        if last.validation_result.progress_summary:
+            parts.append(last.validation_result.progress_summary)
+    return " ".join(parts).lower()

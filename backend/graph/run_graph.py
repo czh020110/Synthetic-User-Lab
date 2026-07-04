@@ -48,7 +48,7 @@ from backend.schemas.run_schemas import (
     ValidationResult,
     render_action_definitions,
 )
-from backend.stores import get_run_store
+from backend.stores import get_entity_store, get_run_store
 
 logger = logging.getLogger(__name__)
 MODEL_API_RETRY_LIMIT = 5
@@ -616,15 +616,18 @@ async def prepare_recovery_action(state: RunState) -> dict:
     if task is None or page_state is None:
         raise ValueError("Task or page state is missing before recovery action.")
 
-    friction_signals = list(validation.friction_signals) if validation is not None else []
+    retrieval_context = state.get("retrieval_context", [])
     step_logs = state.get("step_logs", [])
     recovery_history = state.get("recovery_history") or []
+
+    friction_signals = list(validation.friction_signals) if validation is not None else []
 
     recovery_action = choose_recovery_action(
         task=task,
         friction_signals=friction_signals,
         step_logs=step_logs,
         recovery_history=recovery_history,
+        entity_store=get_entity_store(),
     )
 
     new_history_entry = {

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from backend.schemas.run_schemas import Persona, RetrievedContextItem, RetrievalSourceType, Task
+from backend.stores.entity_store_protocol import EntityStore
 
 
 @dataclass(frozen=True)
@@ -48,11 +49,22 @@ _SEEDS: tuple[RetrievalSeed, ...] = (
 )
 
 
-def build_retrieval_context(persona: Persona, task: Task, *, limit_per_type: int = 2) -> list[RetrievedContextItem]:
+def build_retrieval_context(
+    persona: Persona,
+    task: Task,
+    *,
+    entity_store: EntityStore | None = None,
+    limit_per_type: int = 2,
+) -> list[RetrievedContextItem]:
     query = _build_query_text(persona, task)
     contexts: list[RetrievedContextItem] = []
+
     for source_type in _SOURCE_TYPES:
-        ranked = _rank_seeds(query, source_type)
+        # Get seeds for this source_type only
+        type_seeds = [s for s in _SEEDS if s.source_type == source_type]
+        if entity_store is not None:
+            type_seeds = _merge_entity_store_items(type_seeds, entity_store, source_type)
+        ranked = _rank_seeds(query, type_seeds)
         for seed in ranked[:limit_per_type]:
             contexts.append(
                 RetrievedContextItem(
@@ -75,6 +87,31 @@ def render_retrieval_context(items: list[RetrievedContextItem]) -> str:
     )
 
 
+def _merge_entity_store_items(
+    seeds: list[RetrievalSeed],
+    entity_store: EntityStore,
+    source_type: RetrievalSourceType,
+) -> list[RetrievalSeed]:
+    """将 entity_store 中的真实条目与硬编码种子合并，真实条目排在种子前面。"""
+    try:
+        items = entity_store.list_knowledge_items(source_type=source_type)
+    except Exception:
+        return seeds
+
+    converted = [
+        RetrievalSeed(
+            source_type=item.source_type,
+            title=item.title,
+            content=item.content,
+            keywords=tuple(item.keywords or ()),
+            source_ref=item.source_ref or f"entity:{item.id}",
+        )
+        for item in items
+    ]
+    # 真实条目排在前面，确保它们不因 limit_per_type 截断而被跳过
+    return converted + seeds  # type: ignore[return-value]
+
+
 def _build_query_text(persona: Persona, task: Task) -> str:
     parts = [
         persona.name,
@@ -91,10 +128,22 @@ def _build_query_text(persona: Persona, task: Task) -> str:
     return "\n".join(part for part in parts if part).lower()
 
 
-def _rank_seeds(query: str, source_type: RetrievalSourceType) -> list[RetrievalSeed]:
-    candidates = [seed for seed in _SEEDS if seed.source_type == source_type]
+def _rank_seeds(query: str, seeds: list[RetrievalSeed]) -> list[RetrievalSeed]:
     scored = sorted(
-        ((sum(1 for keyword in seed.keywords if keyword.lower() in query), seed) for seed in candidates),
+        ((_score_seed(query, seed), seed) for seed in seeds),
         key=lambda item: (-item[0], item[1].title),
     )
     return [seed for _score, seed in scored]
+
+
+def _score_seed(query: str, seed: RetrievalSeed) -> int:
+    """按关键词命中数打分；命中关键词得 1 分；标题/内容包含关键词也予加权。"""
+    score = 0
+    query_lower = query.lower()
+    for keyword in seed.keywords:
+        kw_lower = keyword.lower()
+        if kw_lower in query_lower:
+            score += 1
+        if kw_lower in seed.content.lower() or kw_lower in seed.title.lower():
+            score += 1
+    return score

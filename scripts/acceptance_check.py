@@ -37,6 +37,8 @@ from fastapi.testclient import TestClient
 from backend.execution.action_guard import is_destructive_action
 from backend.fixtures.mvp_samples import get_mvp_personas, get_mvp_tasks
 from backend.main import app
+from backend.retrieval import build_retrieval_context, retrieve_failure_cases
+from backend.schemas.knowledge_schemas import KnowledgeItemCreate
 from backend.schemas.persona_schemas import Persona
 from backend.schemas.run_schemas import (
     AbandonPayload,
@@ -376,8 +378,65 @@ def check_error_branches(report: AcceptanceReport) -> None:
     record(report, "run 报告未就绪时返回 409", early_report.status_code == 409, f"code={early_report.status_code}")
 
 
-def check_safety_guard(report: AcceptanceReport) -> None:
-    """真实验证动作安全护栏（S-005 安全边界目标）。"""
+def check_knowledge_retrieval(report: AcceptanceReport) -> None:
+    """验收路径 5：知识检索接入 knowledge_items。"""
+
+    print("\n[路径 5] 知识检索接入 knowledge_items")
+    entity_store = get_entity_store()
+    persona = Persona(name="验收测试用户", description="测试用户", skill_level="newbie")
+    task = Task(name="测试任务", description="测试注册流程", start_url="http://testserver")
+
+    # === 空库兜底：不设知识条目，build_retrieval_context 应回退硬编码种子 ===
+    items = build_retrieval_context(persona, task, entity_store=entity_store)
+    record(report, "空库时 build_retrieval_context 不报错并返回结果", len(items) > 0)
+
+    friction_empty = retrieve_failure_cases([], [])
+    record(report, "无摩擦信号时 retrieve_failure_cases 返回空", len(friction_empty) == 0)
+
+    friction_fallback = retrieve_failure_cases(["stuck_page"], [], entity_store=entity_store)
+    record(report, "空库时 retrieve_failure_cases 回退到硬编码种子", len(friction_fallback) > 0)
+
+    # === 录入知识条目后验证命中 ===
+    product_item = KnowledgeItemCreate(
+        source_type="product_knowledge",
+        title="验收测试：注册完成条件",
+        content="用户注册成功后应显示欢迎卡片且已填充用户名。",
+        keywords=["注册", "欢迎卡片", "用户名", "完成"],
+        source_ref="acceptance:test:register",
+    )
+    product_resp = client.post("/api/v1/knowledge/", json=product_item.model_dump())
+    record(report, "POST /knowledge (product_knowledge) 返回 200", product_resp.status_code == 200)
+
+    failure_item = KnowledgeItemCreate(
+        source_type="failure_case",
+        title="验收测试：页面无响应",
+        content="页面卡住时先尝试按 Escape，再回起始页。",
+        keywords=["卡住", "无响应", "Escape", "起始页"],
+        source_ref="acceptance:test:stuck",
+    )
+    failure_resp = client.post("/api/v1/knowledge/", json=failure_item.model_dump())
+    record(report, "POST /knowledge (failure_case) 返回 200", failure_resp.status_code == 200)
+
+    # 验证 product_knowledge 命中
+    product_items = build_retrieval_context(persona, task, entity_store=entity_store)
+    product_hit = any("acceptance:test:register" in item.source_ref for item in product_items)
+    record(report, "build_retrieval_context 命中验收产品知识条目", product_hit)
+
+    # 验证 failure_case 命中
+    failure_items = retrieve_failure_cases(["卡住"], [], entity_store=entity_store)
+    failure_hit = any("acceptance:test:stuck" in item.source_ref for item in failure_items)
+    record(report, "retrieve_failure_cases 命中验收失败案例条目", failure_hit)
+
+    # source_type 过滤
+    only_knowledge = build_retrieval_context(persona, task, entity_store=entity_store, limit_per_type=10)
+    only_product = [i for i in only_knowledge if i.source_type == "product_knowledge"]
+    only_failure = [i for i in only_knowledge if i.source_type == "failure_case"]
+    record(report, "product_knowledge 与 failure_case 均在 retrieval_context 中分别出现",
+           len(only_product) > 0 and len(only_failure) > 0)
+
+    # 创建后的 failure_case 也在 retrieval_context 中出现（build_retrieval_context 通吃两种 source_type）
+    record(report, "failure_case 条目出现在 build_retrieval_context 返回值中",
+           any(i.source_type == "failure_case" and "acceptance:test:stuck" in i.source_ref for i in only_knowledge))
 
     print("\n[路径 4] 动作安全护栏")
     task = Task(start_url="https://example.com", destructive_action_allowed=False)
@@ -503,7 +562,7 @@ def run_acceptance() -> AcceptanceReport:
         check_demo_run_path(report)
         check_formal_run_path(report)
         check_error_branches(report)
-        check_safety_guard(report)
+        check_knowledge_retrieval(report)
     except Exception as exc:  # noqa: BLE001 - 验收脚本需捕获中断并记录
         traceback.print_exc()
         record(report, "验收流程未中断", False, f"{type(exc).__name__}: {exc}")

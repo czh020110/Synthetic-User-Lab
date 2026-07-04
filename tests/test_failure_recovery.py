@@ -183,3 +183,51 @@ class TestBuildFailureQuery:
     def test_empty_logs_only_signals(self):
         query = _build_failure_query(["page_error"], [])
         assert "page_error" in query
+
+
+class TestRetrieveFailureCasesWithEntityStore:
+    def test_empty_entity_store_falls_back_to_seeds(self):
+        from backend.stores.in_memory_entity_store import InMemoryEntityStore
+
+        entity_store = InMemoryEntityStore()
+        result = retrieve_failure_cases(["stuck_page"], [], entity_store=entity_store)
+        assert len(result) > 0
+        # Must return seed items
+        assert any(item.source_ref.startswith("seed:") for item in result)
+
+    def test_real_failure_case_in_entity_store_is_hit(self):
+        from backend.stores.in_memory_entity_store import InMemoryEntityStore
+        from backend.schemas.knowledge_schemas import KnowledgeItem
+
+        entity_store = InMemoryEntityStore()
+        entity_store.create_knowledge_item(
+            KnowledgeItem(
+                source_type="failure_case",
+                title="测试：页面卡住恢复",
+                content="卡住时按 Escape 并导航到主页。",
+                keywords=["卡住", "页面卡住", "Escape"],
+                source_ref="test:fc:stuck",
+            )
+        )
+
+        result = retrieve_failure_cases(["卡住"], [], entity_store=entity_store)
+        assert any("test:fc:stuck" in item.source_ref for item in result)
+
+    def test_entity_store_item_returns_retrieved_context_item(self):
+        from backend.stores.in_memory_entity_store import InMemoryEntityStore
+        from backend.schemas.knowledge_schemas import KnowledgeItem
+
+        entity_store = InMemoryEntityStore()
+        entity_store.create_knowledge_item(
+            KnowledgeItem(
+                source_type="failure_case",
+                title="测试条目",
+                content="测试内容。",
+                keywords=["测试"],
+                source_ref="test:fc:item",
+            )
+        )
+
+        result = retrieve_failure_cases(["测试"], [], entity_store=entity_store)
+        assert all(isinstance(item, RetrievedContextItem) for item in result)
+        assert any(item.source_type == "failure_case" for item in result)
