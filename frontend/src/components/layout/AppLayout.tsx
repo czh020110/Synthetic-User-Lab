@@ -4,6 +4,8 @@ import {
   TeamOutlined,
   PlayCircleOutlined,
   RocketOutlined,
+  QuestionCircleOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router';
 
@@ -19,9 +21,19 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Determine selected key based on current path
   let selectedKey = location.pathname;
   if (selectedKey.startsWith('/runs/') && selectedKey !== '/runs/new') {
     selectedKey = '/';
+  }
+  if (selectedKey.startsWith('/entities/')) {
+    selectedKey = '/entities';
+  }
+  if (selectedKey.startsWith('/settings')) {
+    selectedKey = '/settings';
+  }
+  if (selectedKey.startsWith('/help')) {
+    selectedKey = '/help';
   }
 
   return (
@@ -44,15 +56,16 @@ export default function AppLayout() {
           onClick={({ key }) => navigate(key)}
           style={{ borderRight: 'none', paddingTop: 8 }}
         />
+
+        {/* Bottom Actions */}
         <div style={{
           position: 'absolute',
           bottom: 16,
           left: 16,
           right: 16,
-          padding: '12px',
-          background: 'linear-gradient(135deg, rgba(37,99,235,0.04), rgba(37,99,235,0.08))',
-          borderRadius: 12,
-          border: '1px solid rgba(37,99,235,0.12)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
         }}>
           <Button
             type="primary"
@@ -64,6 +77,22 @@ export default function AppLayout() {
           >
             Start Formal Run
           </Button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button
+              icon={<UserOutlined />}
+              onClick={() => navigate('/settings')}
+              style={{ flex: 1, height: 36 }}
+            >
+              Settings
+            </Button>
+            <Button
+              icon={<QuestionCircleOutlined />}
+              onClick={() => navigate('/help')}
+              style={{ flex: 1, height: 36 }}
+            >
+              Help
+            </Button>
+          </div>
         </div>
       </Sider>
       <div className="app-content-wrapper">

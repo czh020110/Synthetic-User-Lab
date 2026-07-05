@@ -1,10 +1,10 @@
 import { Button, Space, Card, Typography, Tag, Modal, Avatar, Tooltip } from 'antd';
 import { PlusOutlined, BookOutlined, EyeOutlined } from '@ant-design/icons';
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useKnowledgeItems, useDeleteKnowledgeItem } from '../../hooks/useKnowledge';
 import KnowledgeForm from './forms/KnowledgeForm';
 import type { KnowledgeItem, RetrievalSourceType } from '../../types/knowledge';
-import EntityDetailDrawer from './EntityDetailDrawer';
 
 const { Text } = Typography;
 
@@ -18,17 +18,24 @@ const sourceTypeIcons: Record<RetrievalSourceType, string> = {
   failure_case: '⚠️',
 };
 
-export default function KnowledgeList() {
+export default function KnowledgeList({ search = '' }: { search?: string }) {
+  const navigate = useNavigate();
   const { data: items, isLoading, isError, refetch } = useKnowledgeItems();
   const deleteItem = useDeleteKnowledgeItem();
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<KnowledgeItem | null>(null);
-  const [detailItem, setDetailItem] = useState<KnowledgeItem | null>(null);
   const [activeTab, setActiveTab] = useState<RetrievalSourceType | 'all'>('all');
 
-  const filtered = (items ?? []).filter((item) =>
+  const allFiltered = (items ?? []).filter((item) =>
     activeTab === 'all' || item.source_type === activeTab
   );
+  const filtered = search
+    ? allFiltered.filter(item =>
+        item.title.toLowerCase().includes(search.toLowerCase()) ||
+        item.content.toLowerCase().includes(search.toLowerCase()) ||
+        (item.keywords || []).some(kw => kw.toLowerCase().includes(search.toLowerCase()))
+      )
+    : allFiltered;
 
   if (isError) {
     return (
@@ -86,16 +93,18 @@ export default function KnowledgeList() {
         <div className="empty-state" style={{ padding: 48 }}>
           <div className="empty-icon" style={{ fontSize: 40, marginBottom: 12 }}>📚</div>
           <h4 style={{ margin: '0 0 8px 0', fontSize: 15, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-            {activeTab === 'all'
+            {search ? 'No matching items' : (activeTab === 'all'
               ? 'No knowledge items yet'
-              : `No ${sourceTypeLabels[activeTab as RetrievalSourceType].label.toLowerCase()} entries`}
+              : `No ${sourceTypeLabels[activeTab as RetrievalSourceType].label.toLowerCase()} entries`)}
           </h4>
           <p style={{ margin: '0 0 16px 0', color: 'var(--color-text-muted)', fontSize: 14 }}>
-            Knowledge items power RAG retrieval for runs.
+            {search ? 'Try a different search term.' : 'Knowledge items power RAG retrieval for runs.'}
           </p>
-          <Button type="primary" onClick={() => { setEditItem(null); setModalOpen(true); }} className="btn-primary-gradient">
-            Create Knowledge Item
-          </Button>
+          {!search && (
+            <Button type="primary" onClick={() => { setEditItem(null); setModalOpen(true); }} className="btn-primary-gradient">
+              Create Knowledge Item
+            </Button>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -107,7 +116,8 @@ export default function KnowledgeList() {
                 key={item.id}
                 className="demo-card"
                 size="small"
-                style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}
+                style={{ borderRadius: 12, border: '1px solid var(--color-border)', cursor: 'pointer' }}
+                onClick={() => navigate(`/entities/knowledge/${item.id}`)}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '4px' }}>
                   <div style={{ display: 'flex', gap: 12, flex: 1 }}>
@@ -155,13 +165,13 @@ export default function KnowledgeList() {
                       )}
                     </div>
                   </div>
-                  <Space>
+                  <Space onClick={(e) => e.stopPropagation()}>
                     <Tooltip title="View Detail">
                       <Button
                         size="small"
                         type="link"
                         icon={<EyeOutlined />}
-                        onClick={() => setDetailItem(item)}
+                        onClick={() => navigate(`/entities/knowledge/${item.id}`)}
                       >
                         View
                       </Button>
@@ -197,13 +207,6 @@ export default function KnowledgeList() {
         open={modalOpen}
         editItem={editItem}
         onClose={() => { setModalOpen(false); setEditItem(null); }}
-      />
-
-      <EntityDetailDrawer
-        entity={detailItem}
-        type="knowledge"
-        open={!!detailItem}
-        onClose={() => setDetailItem(null)}
       />
     </div>
   );

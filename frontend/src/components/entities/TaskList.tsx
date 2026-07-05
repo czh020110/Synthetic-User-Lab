@@ -1,21 +1,28 @@
 import { Button, Space, Card, Typography, Modal, Tag, Avatar, Tooltip } from 'antd';
 import { PlusOutlined, FileTextOutlined, EyeOutlined } from '@ant-design/icons';
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useTasks, useDeleteTask } from '../../hooks/useTasks';
 import TaskForm from './forms/TaskForm';
 import type { Task } from '../../types/task';
-import EntityDetailDrawer from './EntityDetailDrawer';
 
 const { Text } = Typography;
 
-export default function TaskList() {
+export default function TaskList({ search = '' }: { search?: string }) {
+  const navigate = useNavigate();
   const { data: tasks, isLoading, isError, refetch } = useTasks();
   const deleteTask = useDeleteTask();
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<Task | null>(null);
-  const [detailItem, setDetailItem] = useState<Task | null>(null);
 
-  const items = tasks ?? [];
+  const allItems = tasks ?? [];
+  const items = search
+    ? allItems.filter(t =>
+        t.name.toLowerCase().includes(search.toLowerCase()) ||
+        (t.description || '').toLowerCase().includes(search.toLowerCase()) ||
+        (t.start_url || '').toLowerCase().includes(search.toLowerCase())
+      )
+    : allItems;
 
   if (isError) {
     return (
@@ -49,14 +56,16 @@ export default function TaskList() {
         <div className="empty-state" style={{ padding: 48 }}>
           <div className="empty-icon" style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
           <h4 style={{ margin: '0 0 8px 0', fontSize: 15, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-            No tasks yet
+            {search ? 'No matching tasks' : 'No tasks yet'}
           </h4>
           <p style={{ margin: '0 0 16px 0', color: 'var(--color-text-muted)', fontSize: 14 }}>
-            Create one to get started.
+            {search ? 'Try a different search term.' : 'Create one to get started.'}
           </p>
-          <Button type="primary" onClick={() => setModalOpen(true)} className="btn-primary-gradient">
-            Create Task
-          </Button>
+          {!search && (
+            <Button type="primary" onClick={() => setModalOpen(true)} className="btn-primary-gradient">
+              Create Task
+            </Button>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -65,7 +74,8 @@ export default function TaskList() {
               key={t.id}
               className="demo-card"
               size="small"
-              style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}
+              style={{ borderRadius: 12, border: '1px solid var(--color-border)', cursor: 'pointer' }}
+              onClick={() => navigate(`/entities/tasks/${t.id}`)}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '4px' }}>
                 <div style={{ display: 'flex', gap: 12, flex: 1 }}>
@@ -111,13 +121,13 @@ export default function TaskList() {
                     </div>
                   </div>
                 </div>
-                <Space>
+                <Space onClick={(e) => e.stopPropagation()}>
                   <Tooltip title="View Detail">
                     <Button
                       size="small"
                       type="link"
                       icon={<EyeOutlined />}
-                      onClick={() => setDetailItem(t)}
+                      onClick={() => navigate(`/entities/tasks/${t.id}`)}
                     >
                       View
                     </Button>
@@ -152,13 +162,6 @@ export default function TaskList() {
         open={modalOpen}
         editItem={editItem}
         onClose={() => { setModalOpen(false); setEditItem(null); }}
-      />
-
-      <EntityDetailDrawer
-        entity={detailItem}
-        type="task"
-        open={!!detailItem}
-        onClose={() => setDetailItem(null)}
       />
     </div>
   );

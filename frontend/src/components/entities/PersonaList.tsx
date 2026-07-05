@@ -1,21 +1,27 @@
 import { Button, Space, Card, Typography, Modal, Tag, Avatar, Tooltip } from 'antd';
 import { PlusOutlined, UserOutlined, EyeOutlined } from '@ant-design/icons';
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { usePersonas, useDeletePersona } from '../../hooks/usePersonas';
 import type { Persona } from '../../types/persona';
 import PersonaForm from './forms/PersonaForm';
-import EntityDetailDrawer from './EntityDetailDrawer';
 
 const { Text } = Typography;
 
-export default function PersonaList() {
+export default function PersonaList({ search = '' }: { search?: string }) {
+  const navigate = useNavigate();
   const { data: personas, isLoading, isError, refetch } = usePersonas();
   const deletePersona = useDeletePersona();
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<Persona | null>(null);
-  const [detailItem, setDetailItem] = useState<Persona | null>(null);
 
-  const items = personas ?? [];
+  const allItems = personas ?? [];
+  const items = search
+    ? allItems.filter(p =>
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        (p.description || '').toLowerCase().includes(search.toLowerCase())
+      )
+    : allItems;
 
   if (isError) {
     return (
@@ -49,18 +55,20 @@ export default function PersonaList() {
         <div className="empty-state" style={{ padding: 48 }}>
           <div className="empty-icon" style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
           <h4 style={{ margin: '0 0 8px 0', fontSize: 15, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-            No personas yet
+            {search ? 'No matching personas' : 'No personas yet'}
           </h4>
           <p style={{ margin: '0 0 16px 0', color: 'var(--color-text-muted)', fontSize: 14 }}>
-            Create one to get started.
+            {search ? 'Try a different search term.' : 'Create one to get started.'}
           </p>
-          <Button
-            type="primary"
-            onClick={() => setModalOpen(true)}
-            className="btn-primary-gradient"
-          >
-            Create Persona
-          </Button>
+          {!search && (
+            <Button
+              type="primary"
+              onClick={() => setModalOpen(true)}
+              className="btn-primary-gradient"
+            >
+              Create Persona
+            </Button>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -69,7 +77,8 @@ export default function PersonaList() {
               key={p.id}
               className="demo-card"
               size="small"
-              style={{ borderRadius: 12, border: '1px solid var(--color-border)', padding: '0' }}
+              style={{ borderRadius: 12, border: '1px solid var(--color-border)', padding: '0', cursor: 'pointer' }}
+              onClick={() => navigate(`/entities/personas/${p.id}`)}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 20px' }}>
                 <div style={{ display: 'flex', gap: 12, flex: 1 }}>
@@ -93,13 +102,13 @@ export default function PersonaList() {
                     )}
                   </div>
                 </div>
-                <Space>
+                <Space onClick={(e) => e.stopPropagation()}>
                   <Tooltip title="View Detail">
                     <Button
                       size="small"
                       type="link"
                       icon={<EyeOutlined />}
-                      onClick={() => setDetailItem(p)}
+                      onClick={() => navigate(`/entities/personas/${p.id}`)}
                     >
                       View
                     </Button>
@@ -134,13 +143,6 @@ export default function PersonaList() {
         open={modalOpen}
         editItem={editItem}
         onClose={() => { setModalOpen(false); setEditItem(null); }}
-      />
-
-      <EntityDetailDrawer
-        entity={detailItem}
-        type="persona"
-        open={!!detailItem}
-        onClose={() => setDetailItem(null)}
       />
     </div>
   );

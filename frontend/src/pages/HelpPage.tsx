@@ -1,0 +1,172 @@
+import { Typography, Card, Collapse, List, Space, Button, Steps } from 'antd';
+import { ArrowLeftOutlined, RocketOutlined, PlayCircleOutlined, FileSearchOutlined, TeamOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router';
+
+const { Title, Text, Paragraph } = Typography;
+
+export default function HelpPage() {
+  const navigate = useNavigate();
+
+  const quickStartSteps = [
+    {
+      title: 'Create Entities',
+      description: 'Navigate to the Entities page to create Personas, Tasks, and Knowledge items.',
+    },
+    {
+      title: 'Start a Run',
+      description: 'Use the "Start Formal Run" button to launch a run with a Persona and Task.',
+    },
+    {
+      title: 'Monitor Progress',
+      description: 'View real-time step logs and screenshots in the Run Detail page.',
+    },
+    {
+      title: 'Review Report',
+      description: 'After completion, view the comprehensive report with findings and recommendations.',
+    },
+  ];
+
+  const faqItems = [
+    {
+      key: '1',
+      label: 'What is a Persona?',
+      children: (
+        <Paragraph>
+          A Persona represents a synthetic user profile with specific skill level, patience, and risk preference.
+          Personas are used to simulate different types of users during automated testing.
+        </Paragraph>
+      ),
+    },
+    {
+      key: '2',
+      label: 'What is a Task?',
+      children: (
+        <Paragraph>
+          A Task defines a specific testing scenario with a start URL, success criteria, max steps, and allowed actions.
+          Tasks are executed by AI agents guided by a Persona.
+        </Paragraph>
+      ),
+    },
+    {
+      key: '3',
+      label: 'What is a Knowledge Item?',
+      children: (
+        <Paragraph>
+          Knowledge Items provide context for RAG (Retrieval-Augmented Generation) during run execution.
+          They include Product Knowledge and Failure Cases to help the AI agent make better decisions.
+        </Paragraph>
+      ),
+    },
+    {
+      key: '4',
+      label: 'What is the difference between Demo Run and Formal Run?',
+      children: (
+        <Paragraph>
+          <Text strong>Demo Run</Text> uses preset Persona and Task for quick testing.{' '}
+          <Text strong>Formal Run</Text> requires explicit Persona and Task selection and provides
+          more detailed configuration options.
+        </Paragraph>
+      ),
+    },
+    {
+      key: '5',
+      label: 'How does the security guard work?',
+      children: (
+        <Paragraph>
+          The security guard automatically blocks high-risk actions (payment, deletion, publishing) in production environments.
+          You can enable destructive actions per Task, but this is not recommended for production testing.
+        </Paragraph>
+      ),
+    },
+    {
+      key: '6',
+      label: 'How are screenshots captured?',
+      children: (
+        <Paragraph>
+          Screenshots are automatically captured at key points: before actions, after actions, and during wait observations.
+          They are stored locally and can be viewed in the Run Detail and Report pages.
+        </Paragraph>
+      ),
+    },
+  ];
+
+  const keyFeatures = [
+    { icon: <TeamOutlined />, title: 'Entity Management', description: 'Create and manage Personas, Tasks, and Knowledge items' },
+    { icon: <PlayCircleOutlined />, title: 'Demo Run', description: 'Quick test run with preset configuration' },
+    { icon: <RocketOutlined />, title: 'Formal Run', description: 'Full-featured run with custom Persona and Task' },
+    { icon: <FileSearchOutlined />, title: 'Detailed Reports', description: 'Comprehensive reports with findings and recommendations' },
+  ];
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+        <Button
+          type="text"
+          icon={<ArrowLeftOutlined />}
+          onClick={() => navigate('/')}
+          style={{ borderRadius: 8 }}
+        />
+        <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+          Help & Documentation
+        </Title>
+      </div>
+
+      {/* Introduction */}
+      <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)', marginBottom: 24 }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+          <QuestionCircleOutlined style={{ fontSize: 48, color: 'var(--color-primary)' }} />
+          <div>
+            <Title level={3} style={{ marginTop: 0 }}>Welcome to Synthetic User Lab</Title>
+            <Paragraph style={{ fontSize: 15, lineHeight: 1.6 }}>
+              Synthetic User Lab is an automated UX testing platform that uses AI agents to simulate user behavior.
+              It helps you identify usability issues, friction points, and areas for improvement in your web applications.
+            </Paragraph>
+          </div>
+        </div>
+      </Card>
+
+      {/* Key Features */}
+      <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)', marginBottom: 24 }}>
+        <Title level={4}>Key Features</Title>
+        <List
+          grid={{ gutter: 24, xs: 1, sm: 2 }}
+          dataSource={keyFeatures}
+          renderItem={(item) => (
+            <List.Item>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ fontSize: 24, color: 'var(--color-primary)' }}>{item.icon}</div>
+                <div>
+                  <Text strong style={{ display: 'block', marginBottom: 4 }}>{item.title}</Text>
+                  <Text type="secondary" style={{ fontSize: 13 }}>{item.description}</Text>
+                </div>
+              </div>
+            </List.Item>
+          )}
+        />
+      </Card>
+
+      {/* Quick Start Guide */}
+      <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)', marginBottom: 24 }}>
+        <Title level={4}>Quick Start Guide</Title>
+        <Steps
+          direction="vertical"
+          current={-1}
+          items={quickStartSteps}
+        />
+      </Card>
+
+      {/* FAQ */}
+      <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
+        <Title level={4}>Frequently Asked Questions</Title>
+        <Collapse items={faqItems} />
+      </Card>
+
+      <div style={{ marginTop: 24, textAlign: 'center' }}>
+        <Space direction="vertical" size="small">
+          <Text type="secondary">Need more help?</Text>
+          <Button type="link" onClick={() => navigate('/settings')}>Contact Support</Button>
+        </Space>
+      </div>
+    </div>
+  );
+}

@@ -1,4 +1,4 @@
-import { Card, Button, Table, message, Typography, Segmented } from 'antd';
+import { Card, Button, Table, message, Typography, Segmented, Space } from 'antd';
 import { PlayCircleOutlined, ArrowRightOutlined, RocketOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -76,16 +76,28 @@ export default function DashboardPage() {
     {
       title: 'Actions',
       key: 'actions',
-      width: 120,
+      width: 180,
       render: (_: any, record: any) => (
-        <Button
-          type="link"
-          size="small"
-          onClick={() => navigate(`/runs/${record.run_id}`)}
-          style={{ fontWeight: 500 }}
-        >
-          View Detail
-        </Button>
+        <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            onClick={() => navigate(`/runs/${record.run_id}`)}
+            style={{ fontWeight: 500, padding: 0 }}
+          >
+            Detail
+          </Button>
+          {(record.status === 'succeeded' || record.status === 'failed') && (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => navigate(`/runs/${record.run_id}/report`)}
+              style={{ fontWeight: 500, padding: 0 }}
+            >
+              Report
+            </Button>
+          )}
+        </Space>
       ),
     },
   ];

@@ -1,6 +1,7 @@
-import { Tabs, Typography, Breadcrumb } from 'antd';
-import { UserOutlined, FileTextOutlined, BookOutlined } from '@ant-design/icons';
+import { Tabs, Typography, Breadcrumb, Input } from 'antd';
+import { UserOutlined, FileTextOutlined, BookOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router';
+import { useState } from 'react';
 import PersonaList from '../components/entities/PersonaList';
 import TaskList from '../components/entities/TaskList';
 import KnowledgeList from '../components/entities/KnowledgeList';
@@ -9,6 +10,7 @@ const { Title, Text } = Typography;
 
 export default function EntitiesPage() {
   const navigate = useNavigate();
+  const [search, setSearch] = useState('');
 
   return (
     <div>
@@ -40,7 +42,7 @@ export default function EntitiesPage() {
                 <UserOutlined /> Personas
               </span>
             ),
-            children: <PersonaList />,
+            children: <PersonaList search={search} />,
           },
           {
             key: 'tasks',
@@ -49,7 +51,7 @@ export default function EntitiesPage() {
                 <FileTextOutlined /> Tasks
               </span>
             ),
-            children: <TaskList />,
+            children: <TaskList search={search} />,
           },
           {
             key: 'knowledge',
@@ -58,9 +60,19 @@ export default function EntitiesPage() {
                 <BookOutlined /> Knowledge
               </span>
             ),
-            children: <KnowledgeList />,
+            children: <KnowledgeList search={search} />,
           },
         ]}
+        tabBarExtraContent={
+          <Input
+            placeholder="Search entities..."
+            prefix={<SearchOutlined style={{ color: 'var(--color-text-muted)' }} />}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ width: 240, borderRadius: 8 }}
+            allowClear
+          />
+        }
         style={{
           background: 'var(--color-card)',
           borderRadius: 12,
