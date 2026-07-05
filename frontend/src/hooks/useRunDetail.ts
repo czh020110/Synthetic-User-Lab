@@ -9,7 +9,6 @@ const isPolling = (status?: RunStatus) => status === 'queued' || status === 'run
  * 先尝试 formal run API，404 时自动 fallback 到 demo run API。
  */
 export function useRunDetail(runId: string, initialIsDemo?: boolean) {
-  // 先用 formal API 尝试；如果 initialIsDemo 已知为 true 则直接用 demo
   const statusQuery = useQuery({
     queryKey: ['run-detail', runId, 'status'],
     queryFn: async () => {
@@ -18,9 +17,9 @@ export function useRunDetail(runId: string, initialIsDemo?: boolean) {
       }
       try {
         return await api.getRunStatus(runId);
-      } catch (err) {
+      } catch (err: any) {
         // formal run 404 → fallback 到 demo run
-        if (err instanceof Error && err.message.includes('not found')) {
+        if (err?.response?.status === 404) {
           return api.getDemoRunStatus(runId);
         }
         throw err;
@@ -32,17 +31,6 @@ export function useRunDetail(runId: string, initialIsDemo?: boolean) {
     },
   });
 
-  const resolvedIsDemo = initialIsDemo ?? (() => {
-    // 如果 formal API 返回了数据，说明不是 demo run
-    // 如果 fallback 到了 demo API，queryKey 不变但数据来自 demo
-    // 通过 queryKey 中的信息无法判断，所以用函数内闭包变量
-    return false; // 默认 formal，fallback 在 queryFn 中已处理
-  })();
-
-  // 使用 statusQuery 数据判断是否走 demo 路径
-  // 更简洁的方案：统一用同一套 queryKey，根据 queryFn 中的 fallback 结果选择 steps/report 端点
-  const isDemoRun = initialIsDemo === true;
-
   const stepsQuery = useQuery({
     queryKey: ['run-detail', runId, 'steps'],
     queryFn: async () => {
@@ -51,8 +39,8 @@ export function useRunDetail(runId: string, initialIsDemo?: boolean) {
       }
       try {
         return await api.getRunSteps(runId);
-      } catch (err) {
-        if (err instanceof Error && err.message.includes('not found')) {
+      } catch (err: any) {
+        if (err?.response?.status === 404) {
           return api.getDemoRunSteps(runId);
         }
         throw err;
@@ -70,8 +58,8 @@ export function useRunDetail(runId: string, initialIsDemo?: boolean) {
       }
       try {
         return await api.getRunReport(runId);
-      } catch (err) {
-        if (err instanceof Error && err.message.includes('not found')) {
+      } catch (err: any) {
+        if (err?.response?.status === 404) {
           return api.getDemoRunReport(runId);
         }
         throw err;

@@ -1,39 +1,44 @@
-import { Card, Table, Tag, Typography } from 'antd';
-import type { FrictionIssue, FrictionSeverity } from '../../types/report';
+import { Typography, Alert, Empty } from 'antd';
+import type { FrictionIssue } from '../../types/report';
 
-const { Title } = Typography;
-
-const severityColor: Record<FrictionSeverity, string> = {
-  low: 'green',
-  medium: 'orange',
-  high: 'red',
-};
+const { Text } = Typography;
 
 export default function FrictionIssues({ issues }: { issues: FrictionIssue[] }) {
-  if (!issues.length) return null;
-
-  const columns = [
-    { title: 'Signal', dataIndex: 'signal', key: 'signal' },
-    {
-      title: 'Severity',
-      dataIndex: 'severity',
-      key: 'severity',
-      render: (s: FrictionSeverity) => <Tag color={severityColor[s]}>{s}</Tag>,
-    },
-    { title: 'Steps', dataIndex: 'step_indexes', key: 'step_indexes', render: (v: number[]) => v.join(', ') },
-    { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true },
-    { title: 'Suggested Fix', dataIndex: 'suggested_fix', key: 'suggested_fix', ellipsis: true },
-  ];
+  if (!issues || issues.length === 0) {
+    return (
+      <Empty
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        description={<span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No friction signals detected</span>}
+        style={{ padding: '16px 0' }}
+      />
+    );
+  }
 
   return (
-    <Card title={<Title level={5} style={{ margin: 0 }}>Friction Issues</Title>}>
-      <Table
-        dataSource={issues}
-        columns={columns}
-        rowKey={(_, i) => String(i)}
-        size="small"
-        pagination={false}
-      />
-    </Card>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {issues.map((issue, index) => (
+        <Alert
+          key={`${issue.signal}-${index}`}
+          message={
+            <div>
+              <Text strong style={{ fontSize: 13 }}>{issue.signal}</Text>
+              {issue.description && (
+                <Text style={{ display: 'block', marginTop: 4, fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                  {issue.description}
+                </Text>
+              )}
+              {issue.suggested_fix && (
+                <Text style={{ display: 'block', marginTop: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                  Fix: {issue.suggested_fix}
+                </Text>
+              )}
+            </div>
+          }
+          type="warning"
+          showIcon
+          style={{ borderRadius: 6 }}
+        />
+      ))}
+    </div>
   );
 }

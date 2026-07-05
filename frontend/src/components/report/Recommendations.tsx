@@ -1,17 +1,19 @@
-import { Card, List, Typography } from 'antd';
+import { List, Typography } from 'antd';
 
-const { Title } = Typography;
+const { Text } = Typography;
 
 export default function Recommendations({ recommendations }: { recommendations: string[] }) {
-  if (!recommendations.length) return null;
+  if (!recommendations || recommendations.length === 0) return null;
 
   return (
-    <Card title={<Title level={5} style={{ margin: 0 }}>Recommendations</Title>}>
-      <List
-        size="small"
-        dataSource={recommendations}
-        renderItem={(item) => <List.Item>{item}</List.Item>}
-      />
-    </Card>
+    <List
+      size="small"
+      dataSource={recommendations}
+      renderItem={(item) => (
+        <div className="finding-item">
+          <Text>💡 {item}</Text>
+        </div>
+      )}
+    />
   );
 }

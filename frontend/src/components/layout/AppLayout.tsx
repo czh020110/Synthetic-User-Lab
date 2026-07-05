@@ -3,6 +3,7 @@ import {
   DashboardOutlined,
   TeamOutlined,
   PlayCircleOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router';
 
@@ -18,30 +19,37 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 计算 selectedKeys：精确匹配 / 或 /entities，/runs/* 匹配 /runs/new
   let selectedKey = location.pathname;
   if (selectedKey.startsWith('/runs/') && selectedKey !== '/runs/new') {
     selectedKey = '/runs/new';
   }
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={200} theme="light">
-        <div style={{ padding: '16px', fontSize: 16, fontWeight: 600, textAlign: 'center' }}>
-          Synthetic User Lab
+    <div className="app-layout">
+      <Sider
+        className="app-sider"
+        width={220}
+        theme="light"
+        style={{ background: '#ffffff' }}
+      >
+        <div className="app-logo">
+          <RobotOutlined className="logo-icon" />
+          <span className="logo-text">Synthetic User Lab</span>
         </div>
         <Menu
+          theme="light"
           mode="inline"
           selectedKeys={[selectedKey]}
           items={menuItems}
           onClick={({ key }) => navigate(key)}
+          style={{ borderRight: 'none', paddingTop: 8 }}
         />
       </Sider>
-      <Layout>
-        <Content style={{ padding: '24px', background: '#fff', minHeight: 360 }}>
+      <div className="app-content-wrapper">
+        <Content className="app-content">
           <Outlet />
         </Content>
-      </Layout>
-    </Layout>
+      </div>
+    </div>
   );
 }

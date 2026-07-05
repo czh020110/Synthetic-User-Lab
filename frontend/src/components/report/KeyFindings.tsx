@@ -1,17 +1,19 @@
-import { Card, List, Typography } from 'antd';
+import { List, Typography } from 'antd';
 
-const { Title } = Typography;
+const { Text } = Typography;
 
 export default function KeyFindings({ findings }: { findings: string[] }) {
-  if (!findings.length) return null;
+  if (!findings || findings.length === 0) return null;
 
   return (
-    <Card title={<Title level={5} style={{ margin: 0 }}>Key Findings</Title>}>
-      <List
-        size="small"
-        dataSource={findings}
-        renderItem={(item) => <List.Item>{item}</List.Item>}
-      />
-    </Card>
+    <List
+      size="small"
+      dataSource={findings}
+      renderItem={(item) => (
+        <div className="finding-item">
+          <Text>• {item}</Text>
+        </div>
+      )}
+    />
   );
 }
