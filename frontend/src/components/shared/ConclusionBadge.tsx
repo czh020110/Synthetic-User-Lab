@@ -1,7 +1,7 @@
 import { Tag } from 'antd';
 import type { ReportConclusion } from '../../types/report';
 
-const conclusionConfig: Record<ReportConclusion, { color: string; label: string }> = {
+export const conclusionConfig: Record<ReportConclusion, { color: string; label: string }> = {
   keep: { color: 'success', label: 'Keep' },
   optimize: { color: 'warning', label: 'Optimize' },
   fix: { color: 'error', label: 'Fix' },

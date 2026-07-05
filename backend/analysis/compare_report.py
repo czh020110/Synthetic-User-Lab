@@ -3,10 +3,18 @@ from __future__ import annotations
 # ============================ 跨 persona 对比报告模块 ============================ #
 # 使用技术栈: Python / Pydantic
 # 模块功能: 对同一 task 的多个已完成 run 聚合跨 persona 对比报告
-# 模块数据流: run_ids + RunStore -> 校验 -> 取 record/report -> 聚合 -> CompareReport
+# 模块数据流: run_ids + RunStore -> 校验 -> 取 record/report/steps -> 聚合 -> CompareReport
 # 模块接口说明: build_compare_report() 纯代码聚合,不依赖 LLM,供 API 与 acceptance 复用
 
-from backend.schemas.run_schemas import CompareItem, CompareReport, RunRecord, RunReport
+from typing import get_args
+
+from backend.schemas.run_schemas import (
+    CompareItem,
+    CompareReport,
+    ReportConclusion,
+    RunRecord,
+    RunReport,
+)
 from backend.stores.run_store_protocol import RunStore
 
 
@@ -17,14 +25,11 @@ class CompareError(Exception):
 class RunNotFoundError(CompareError):
     def __init__(self, run_id: str) -> None:
         super().__init__(f"Run not found: {run_id}")
-        self.run_id = run_id
 
 
 class RunNotReadyError(CompareError):
     def __init__(self, run_id: str, status: str) -> None:
         super().__init__(f"Run {run_id} is not finished (status={status})")
-        self.run_id = run_id
-        self.status = status
 
 
 class TaskMismatchError(CompareError):
@@ -32,23 +37,28 @@ class TaskMismatchError(CompareError):
         super().__init__(
             f"Run {run_id} belongs to task {actual_task_id}, expected {expected_task_id}"
         )
-        self.run_id = run_id
-        self.expected_task_id = expected_task_id
-        self.actual_task_id = actual_task_id
 
 
 _TERMINAL_STATUSES = {"succeeded", "failed"}
+# 从 ReportConclusion Literal 派生结论键，新增结论值时自动纳入分布，避免 KeyError
+_CONCLUSION_KEYS: tuple[str, ...] = get_args(ReportConclusion)
 
 
 def build_compare_report(run_ids: list[str], store: RunStore) -> CompareReport:
     """对一组同 task 的已完成 run 聚合跨 persona 对比报告。
 
     校验失败抛 CompareError 子类；成功返回纯代码聚合结果，不调用 LLM。
+    run_ids 自动去重(保留首次出现顺序)，避免重复 run_id 导致计数翻倍。
     """
+
+    if not run_ids:
+        raise ValueError("run_ids must not be empty")
+
+    deduped_ids = list(dict.fromkeys(run_ids))
 
     items: list[CompareItem] = []
     task = None
-    for run_id in run_ids:
+    for run_id in deduped_ids:
         record = store.get_record(run_id)
         if record is None:
             raise RunNotFoundError(run_id)
@@ -59,16 +69,18 @@ def build_compare_report(run_ids: list[str], store: RunStore) -> CompareReport:
         elif record.task.id != task.id:
             raise TaskMismatchError(run_id, task.id, record.task.id)
         report = store.get_report(run_id)
-        items.append(_build_compare_item(run_id, record, report))
+        # report 缺失时(fail_run 路径)从 steps 推导步数与摩擦，避免失败 run 被计为 0
+        steps = store.get_steps(run_id) if report is None else []
+        items.append(_build_compare_item(run_id, record, report, steps))
 
-    # run_ids 非空且至少一个 record 存在时 task 必定被赋值，此处仅为类型收窄
-    assert task is not None
+    assert task is not None  # run_ids 非空且至少一个 record 存在时 task 必定被赋值
 
     success_count = sum(1 for item in items if item.success)
-    conclusion_distribution = {"keep": 0, "optimize": 0, "fix": 0}
+    conclusion_distribution = {key: 0 for key in _CONCLUSION_KEYS}
     for item in items:
         conclusion_distribution[item.conclusion] += 1
     avg_steps = sum(item.total_steps for item in items) / len(items)
+    avg_steps_rounded = round(avg_steps, 2)
     total_friction_signals = sum(item.friction_signal_count for item in items)
 
     return CompareReport(
@@ -76,19 +88,25 @@ def build_compare_report(run_ids: list[str], store: RunStore) -> CompareReport:
         run_count=len(items),
         success_count=success_count,
         conclusion_distribution=conclusion_distribution,
-        avg_steps=round(avg_steps, 2),
+        avg_steps=avg_steps_rounded,
         total_friction_signals=total_friction_signals,
         items=items,
         comparison_summary=_build_comparison_summary(
-            items, success_count, conclusion_distribution, avg_steps, total_friction_signals
+            items, success_count, conclusion_distribution, avg_steps_rounded, total_friction_signals
         ),
     )
 
 
-def _build_compare_item(run_id: str, record: RunRecord, report: RunReport | None) -> CompareItem:
-    """从 record/report 构造对比条目。
+def _build_compare_item(
+    run_id: str,
+    record: RunRecord,
+    report: RunReport | None,
+    steps: list,
+) -> CompareItem:
+    """从 record/report/steps 构造对比条目。
 
-    fail_run 路径下 run 可能没有 report，此时从 record 构造失败条目。
+    report 存在时直接取报告字段；report 缺失时 succeeded 视为数据不一致(报错)，
+    failed 从 steps 推导步数与摩擦信号。
     """
 
     if report is not None:
@@ -106,19 +124,33 @@ def _build_compare_item(run_id: str, record: RunRecord, report: RunReport | None
             key_findings=report.key_findings,
         )
 
+    # succeeded 但无报告：数据不一致，与 GET /runs/{id}/report 的 409 语义一致
+    if record.status == "succeeded":
+        raise RunNotReadyError(run_id, record.status)
+
+    friction_signals = _collect_friction_signals(steps)
     return CompareItem(
         run_id=run_id,
         persona=record.persona,
         success=False,
         conclusion="fix",
-        total_steps=0,
-        friction_signal_count=0,
+        total_steps=len(steps),
+        friction_signal_count=len(friction_signals),
         friction_issue_count=0,
-        friction_signals=[],
-        friction_issues=[],
+        friction_signals=friction_signals,
         summary=record.error_message or "run 失败且未生成报告",
-        key_findings=[],
     )
+
+
+def _collect_friction_signals(steps: list) -> list[str]:
+    """从步骤日志收集去重后的摩擦信号。"""
+
+    collected: list[str] = []
+    for step in steps:
+        for signal in step.validation_result.friction_signals:
+            if signal and signal not in collected:
+                collected.append(signal)
+    return collected
 
 
 def _build_comparison_summary(
@@ -128,7 +160,7 @@ def _build_comparison_summary(
     avg_steps: float,
     total_friction: int,
 ) -> str:
-    """生成纯代码的对比总结文案。"""
+    """生成纯代码的对比总结文案。avg_steps 传入已 round(2) 的值，与 CompareReport.avg_steps 同源。"""
 
     parts = [f"共 {len(items)} 个 persona 完成同一任务"]
     parts.append(f"{success_count} 个成功、{len(items) - success_count} 个失败")

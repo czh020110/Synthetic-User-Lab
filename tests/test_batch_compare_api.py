@@ -258,3 +258,27 @@ def test_build_compare_report_task_mismatch():
         assert False, "应抛 TaskMismatchError"
     except TaskMismatchError:
         pass
+
+
+def test_build_compare_report_dedup_run_ids():
+    """重复 run_id 应去重，避免计数翻倍与重复 React key。"""
+    entity_store = get_entity_store()
+    p1 = Persona(name="u1", skill_level="intermediate"); entity_store.create_persona(p1)
+    p2 = Persona(name="u2", skill_level="intermediate"); entity_store.create_persona(p2)
+    task = Task(name="t", start_url="http://example.com", max_steps=5); entity_store.create_task(task)
+    rid1 = _create_completed_run(p1, task, success=True, conclusion="keep", total_steps=3)
+    rid2 = _create_completed_run(p2, task, success=True, conclusion="optimize", total_steps=5)
+
+    report = build_compare_report([rid1, rid2, rid1], get_run_store())
+    assert report.run_count == 2
+    assert len(report.items) == 2
+    assert report.success_count == 2
+
+
+def test_build_compare_report_empty_run_ids_raises():
+    """空 run_ids 应抛 ValueError，而非 AssertionError/除零。"""
+    try:
+        build_compare_report([], get_run_store())
+        assert False, "应抛 ValueError"
+    except ValueError:
+        pass

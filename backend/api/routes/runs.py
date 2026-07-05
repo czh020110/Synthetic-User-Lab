@@ -122,8 +122,10 @@ async def start_batch_run(request: Request, payload: BatchRunRequest) -> ApiResp
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task not found: {payload.task_id}")
 
+    # 去重，避免同一 persona 被重复发起 run 导致对比报告失真
+    persona_ids = list(dict.fromkeys(payload.persona_ids))
     personas = []
-    for persona_id in payload.persona_ids:
+    for persona_id in persona_ids:
         persona = entity_store.get_persona(persona_id)
         if persona is None:
             raise HTTPException(status_code=404, detail=f"Persona not found: {persona_id}")

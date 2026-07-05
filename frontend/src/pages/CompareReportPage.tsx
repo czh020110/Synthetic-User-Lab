@@ -4,24 +4,21 @@ import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import * as api from '../api/runs';
+import { conclusionConfig } from '../components/shared/ConclusionBadge';
 import type { RunStatusResponse } from '../types/run';
 import type { CompareItem, CompareReport, ReportConclusion } from '../types/report';
 
 const { Title, Text } = Typography;
 
-const CONCLUSION_COLOR: Record<ReportConclusion, string> = {
-  keep: 'success',
-  optimize: 'warning',
-  fix: 'error',
-};
-const CONCLUSION_LABEL: Record<ReportConclusion, string> = {
-  keep: '保留',
-  optimize: '优化',
-  fix: '修复',
-};
-
 function isTerminal(status?: string) {
   return status === 'succeeded' || status === 'failed';
+}
+
+// 对比报告的 400/404/409 是永久错误，重试不会成功；仅对网络等瞬时错误重试一次
+function shouldRetryCompare(failureCount: number, error: unknown): boolean {
+  if (failureCount >= 1) return false;
+  const msg = (error as Error)?.message || '';
+  return !/not found|not finished|belongs to task/i.test(msg);
 }
 
 export default function CompareReportPage() {
@@ -30,30 +27,33 @@ export default function CompareReportPage() {
   const idsParam = searchParams.get('ids') || '';
   const runIds = idsParam ? idsParam.split(',').filter(Boolean) : [];
 
-  // 轮询所有 run 状态，全部终态后停止
+  // 单请求拉取全部 run 状态再按 runIds 过滤，避免每轮 N 次 GET /runs/{id}
   const pollQuery = useQuery({
     queryKey: ['compare-poll', runIds],
-    queryFn: async (): Promise<RunStatusResponse[]> => {
-      return Promise.all(runIds.map((id) => api.getRunStatus(id)));
+    queryFn: async (): Promise<(RunStatusResponse | null)[]> => {
+      const all = await api.listRuns();
+      const byId = new Map(all.map((s) => [s.run_id, s]));
+      return runIds.map((id) => byId.get(id) ?? null);
     },
     enabled: runIds.length >= 2,
     refetchInterval: (query) => {
+      if (query.state.error) return false;
       const statuses = query.state.data;
       if (!statuses) return 2000;
-      return statuses.every((s) => isTerminal(s.status)) ? false : 2000;
+      return statuses.every((s) => s !== null && isTerminal(s.status)) ? false : 2000;
     },
   });
 
   const statuses = pollQuery.data;
-  const allDone = !!statuses && statuses.every((s) => isTerminal(s.status));
-  const doneCount = statuses?.filter((s) => isTerminal(s.status)).length ?? 0;
+  const missingCount = statuses?.filter((s) => s === null).length ?? 0;
+  const allDone = !!statuses && statuses.every((s) => s !== null && isTerminal(s.status));
+  const doneCount = statuses?.filter((s) => s !== null && isTerminal(s.status)).length ?? 0;
 
-  // 全部完成后才请求对比报告
   const compareQuery = useQuery({
     queryKey: ['compare-report', runIds],
     queryFn: () => api.compareRuns(runIds),
     enabled: allDone,
-    retry: 1,
+    retry: shouldRetryCompare,
   });
 
   if (runIds.length < 2) {
@@ -61,6 +61,22 @@ export default function CompareReportPage() {
       <div>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/runs/new')} style={{ marginBottom: 16 }}>返回</Button>
         <Alert type="warning" showIcon message="需要至少 2 个 run 才能生成对比报告" />
+      </div>
+    );
+  }
+
+  // polling 失败或存在缺失 run：显式报错，避免无限 spinner
+  if (pollQuery.isError || (statuses && missingCount > 0)) {
+    const missingMsg = statuses && missingCount > 0 ? `${missingCount} 个 run 不存在或已被清除` : undefined;
+    return (
+      <div>
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')} style={{ marginBottom: 16 }}>返回</Button>
+        <Alert
+          type="error"
+          showIcon
+          message="无法获取 run 状态"
+          description={missingMsg || (pollQuery.error as Error)?.message || '请稍后重试'}
+        />
       </div>
     );
   }
@@ -83,7 +99,7 @@ export default function CompareReportPage() {
             </div>
             <Progress
               percent={Math.round((doneCount / runIds.length) * 100)}
-              style={{ maxWidth: 400, marginTop: 16, margin: '16px auto 0' }}
+              style={{ maxWidth: 400, margin: '16px auto 0' }}
             />
           </div>
         </Card>
@@ -127,7 +143,10 @@ export default function CompareReportPage() {
     {
       title: '结论',
       dataIndex: 'conclusion',
-      render: (c: ReportConclusion) => <Tag color={CONCLUSION_COLOR[c]}>{CONCLUSION_LABEL[c]}</Tag>,
+      render: (c: ReportConclusion) => {
+        const cfg = conclusionConfig[c] ?? { color: 'default', label: c };
+        return <Tag color={cfg.color}>{cfg.label}</Tag>;
+      },
     },
     {
       title: '结果',
@@ -188,11 +207,14 @@ export default function CompareReportPage() {
         <div style={{ marginBottom: 12 }}>
           <Text strong>结论分布</Text>
           <Space style={{ marginLeft: 12 }}>
-            {Object.entries(report.conclusion_distribution).map(([k, v]) => (
-              <Tag key={k} color={CONCLUSION_COLOR[k as ReportConclusion]}>
-                {CONCLUSION_LABEL[k as ReportConclusion]}: {v}
-              </Tag>
-            ))}
+            {Object.entries(report.conclusion_distribution).map(([k, v]) => {
+              const cfg = conclusionConfig[k as ReportConclusion] ?? { color: 'default', label: k };
+              return (
+                <Tag key={k} color={cfg.color}>
+                  {cfg.label}: {v}
+                </Tag>
+              );
+            })}
           </Space>
         </div>
         <Table

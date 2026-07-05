@@ -37,7 +37,7 @@ export default function StartRunPage() {
   const handleSubmit = async (values: any) => {
     const personaIds: string[] = values.persona_ids || [];
     const runName = values.run_name || 'run';
-    const headless = values.headless ? true : undefined;
+    const headless = values.headless === false ? false : true;
     try {
       if (personaIds.length === 1) {
         // 单 persona 走原有单 run 流程

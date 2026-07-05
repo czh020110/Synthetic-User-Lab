@@ -643,14 +643,17 @@ def check_batch_compare(report: AcceptanceReport) -> None:
     r_opt = _make_compare_run(personas[1], success=True, conclusion="optimize", total_steps=5, friction_signals=["stuck_page"])
     r_fix = _make_compare_run(personas[2], success=False, conclusion="fix", total_steps=7)
 
-    cmp = build_compare_report([r_keep, r_opt, r_fix], store)
-    record(report, "纯函数聚合 run_count=3", cmp.run_count == 3)
-    record(report, "纯函数聚合 success_count=2", cmp.success_count == 2)
-    record(report, "纯函数聚合 conclusion_distribution={keep:1,optimize:1,fix:1}",
-           cmp.conclusion_distribution == {"keep": 1, "optimize": 1, "fix": 1},
-           f"dist={cmp.conclusion_distribution}")
-    record(report, "纯函数聚合 avg_steps=5.0", cmp.avg_steps == 5.0, f"avg={cmp.avg_steps}")
-    record(report, "纯函数聚合 total_friction_signals=1", cmp.total_friction_signals == 1)
+    try:
+        cmp = build_compare_report([r_keep, r_opt, r_fix], store)
+        record(report, "纯函数聚合 run_count=3", cmp.run_count == 3)
+        record(report, "纯函数聚合 success_count=2", cmp.success_count == 2)
+        record(report, "纯函数聚合 conclusion_distribution={keep:1,optimize:1,fix:1}",
+               cmp.conclusion_distribution == {"keep": 1, "optimize": 1, "fix": 1},
+               f"dist={cmp.conclusion_distribution}")
+        record(report, "纯函数聚合 avg_steps=5.0", cmp.avg_steps == 5.0, f"avg={cmp.avg_steps}")
+        record(report, "纯函数聚合 total_friction_signals=1", cmp.total_friction_signals == 1)
+    except Exception as exc:  # noqa: BLE001 - 验收脚本局部捕获，避免中断后续 404 检查
+        record(report, "纯函数聚合未抛错", False, f"{type(exc).__name__}: {exc}")
 
     # === 错误分支:compare 不存在 run → 404 ===
     not_found_resp = client.post("/api/v1/runs/compare", json={"run_ids": [r_keep, "ghost"]})
