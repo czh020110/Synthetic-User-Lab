@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>支付成功 - ShopLab</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #f7f8fa; color: #1f2937; line-height: 1.6; }
+  header { background: #111827; color: #fff; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header nav a { color: #d1d5db; text-decoration: none; margin-left: 20px; font-size: 14px; }
+  .container { max-width: 700px; margin: 0 auto; padding: 48px 16px; text-align: center; }
+  .success-card { background: #fff; border-radius: 12px; padding: 40px; border: 2px solid #059669; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .success-icon { font-size: 64px; margin-bottom: 16px; }
+  .success-card h2 { font-size: 22px; font-weight: 700; color: #059669; margin-bottom: 8px; }
+  .success-card p { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+  .order-info { background: #f9fafb; border-radius: 8px; padding: 16px; margin-bottom: 24px; text-align: left; font-size: 14px; color: #4b5563; }
+  .order-info .row { display: flex; justify-content: space-between; padding: 4px 0; }
+  .btn { display: inline-block; padding: 11px 28px; border: none; border-radius: 6px; font-size: 15px; font-weight: 500; cursor: pointer; text-decoration: none; transition: all .15s; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-secondary { background: #fff; color: #2563eb; border: 1px solid #2563eb; margin-left: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛍️ ShopLab</h1>
+  <nav>
+    <a href="index.html">首页</a>
+    <a href="product.html">商品</a>
+    <a href="checkout.html">结算</a>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="success-card" data-testid="success-card">
+    <div class="success-icon">✅</div>
+    <h2>支付成功</h2>
+    <p>您的订单已提交，我们将尽快为您发货。</p>
+    <div class="order-info">
+      <div class="row"><span>订单号</span><span data-testid="order-id">SL202607040001</span></div>
+      <div class="row"><span>商品</span><span>无线降噪耳机 Pro × 1</span></div>
+      <div class="row"><span>支付金额</span><span data-testid="paid-amount">¥924</span></div>
+      <div class="row"><span>预计送达</span><span data-testid="eta">1-2 个工作日</span></div>
+    </div>
+    <a href="index.html" class="btn btn-primary">返回首页</a>
+    <a href="product.html" class="btn btn-secondary">继续购物</a>
+  </div>
+</div>
+
+<script>
+// 从结算页带入实际支付金额与配送方式，避免成功页硬编码金额。
+const paid = localStorage.getItem('sul_paid_amount');
+const shipping = localStorage.getItem('sul_shipping');
+if (paid) document.querySelector('[data-testid="paid-amount"]').textContent = paid;
+if (shipping) document.querySelector('[data-testid="eta"]').textContent = shipping;
+</script>
+
+</body>
+</html>

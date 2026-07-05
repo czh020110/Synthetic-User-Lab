@@ -1,7 +1,13 @@
 """MVP 验收样例数据：3 个 persona + 3 个 task。"""
 
+from __future__ import annotations
+
+from backend.core.config import get_settings
 from backend.schemas.persona_schemas import Persona, PersonaCreate
 from backend.schemas.task_schemas import Task, TaskCreate
+
+# 测试站点 ShopLab 的 base_url，运行时解析为 app_base_url + /site。
+_TEST_SITE_BASE = str(get_settings().app_base_url).rstrip("/") + "/site"
 
 # ============================ Persona 样例 ============================ #
 
@@ -42,56 +48,64 @@ PERSONA_ELDERLY = PersonaCreate(
 )
 
 # ============================ Task 样例 ============================ #
+# 三个 task 指向自托管测试站点 ShopLab 的不同子流程，覆盖从浏览到结算的完整购物链路。
+# start_url 在模块导入时由 _TEST_SITE_BASE（app_base_url + /site）解析为绝对地址，
+# 因 TaskCreate.start_url 校验器要求 http(s) 前缀，故不支持相对路径。
+# ShopLab 站点内故意埋入 4 个 UX 摩擦点：
+#   1. 商品页优惠券输入框错误提示模糊（"操作失败，请重试"）
+#   2. 结算页默认勾选加急配送，运费 ¥25 默认计入总价（隐藏费用）
+#   3. 结算页表单校验失败时只显示"出错了，请检查后重试"，不指明哪个字段
+#   4. 结算页验证码提示埋在页面底部，需滚动可见且远离输入框（验证码 8204）
 
-TASK_REGISTRATION = TaskCreate(
-    name="注册新账号",
-    description="访问注册页面，填写必填信息（用户名、邮箱、密码），完成注册流程。",
-    start_url="https://example.com/register",
+TASK_BROWSE_PURCHASE = TaskCreate(
+    name="浏览商品并完成下单",
+    description="从首页进入商品详情页，点击立即购买，填写收货地址与支付信息，完成下单流程。",
+    start_url=f"{_TEST_SITE_BASE}/index.html",
     success_criteria=[
-        "页面显示「注册成功」或「欢迎」提示",
-        "页面跳转到个人中心或首页",
-        "能看到已登录状态标识",
+        "页面显示「支付成功」提示",
+        "页面显示订单号",
+        "页面显示已支付金额",
     ],
-    max_steps=10,
+    max_steps=15,
     allowed_actions=[
         "navigate", "click", "fill", "wait",
-        "scroll", "press", "check",
-    ],
-    risk_level="low",
-    destructive_action_allowed=False,
-)
-
-TASK_SHOPPING = TaskCreate(
-    name="添加商品到购物车",
-    description="浏览商品列表，选择一个商品，点击加入购物车，确认购物车中有该商品。",
-    start_url="https://example.com/products",
-    success_criteria=[
-        "购物车图标显示数量增加",
-        "页面提示「已加入购物车」",
-        "点击购物车可以看到刚添加的商品",
-    ],
-    max_steps=12,
-    allowed_actions=[
-        "navigate", "click", "fill", "wait",
-        "scroll", "hover", "press",
+        "scroll", "press", "select",
     ],
     risk_level="medium",
     destructive_action_allowed=False,
 )
 
-TASK_SETTINGS = TaskCreate(
-    name="修改个人设置",
-    description="进入个人设置页面，修改昵称或头像，保存设置。",
-    start_url="https://example.com/settings",
+TASK_USE_COUPON = TaskCreate(
+    name="使用优惠券购买商品",
+    description="进入商品详情页，尝试使用优惠券码 SHOP10 享受优惠，然后进入结算完成下单。",
+    start_url=f"{_TEST_SITE_BASE}/product.html",
     success_criteria=[
-        "页面提示「保存成功」或「设置已更新」",
-        "返回设置页面可以看到修改后的内容",
-        "没有报错提示",
+        "优惠券提示「优惠券已应用」",
+        "页面显示「支付成功」",
+        "页面显示已支付金额",
     ],
     max_steps=15,
     allowed_actions=[
         "navigate", "click", "fill", "wait",
-        "scroll", "press", "upload", "select",
+        "scroll", "press",
+    ],
+    risk_level="low",
+    destructive_action_allowed=False,
+)
+
+TASK_CHECKOUT_FORM = TaskCreate(
+    name="填写结算表单完成支付",
+    description="进入结算页面，填写姓名、手机号、地址与支付账号，选择配送方式后完成支付。",
+    start_url=f"{_TEST_SITE_BASE}/checkout.html",
+    success_criteria=[
+        "页面显示「支付成功」",
+        "页面显示订单号",
+        "页面显示已支付金额",
+    ],
+    max_steps=12,
+    allowed_actions=[
+        "navigate", "click", "fill", "wait",
+        "scroll", "press", "select",
     ],
     risk_level="low",
     destructive_action_allowed=False,
@@ -100,7 +114,7 @@ TASK_SETTINGS = TaskCreate(
 # ============================ 样例数据集合 ============================ #
 
 MVP_PERSONAS = [PERSONA_NEWBIE, PERSONA_EXPERT, PERSONA_ELDERLY]
-MVP_TASKS = [TASK_REGISTRATION, TASK_SHOPPING, TASK_SETTINGS]
+MVP_TASKS = [TASK_BROWSE_PURCHASE, TASK_USE_COUPON, TASK_CHECKOUT_FORM]
 
 
 def get_mvp_personas() -> list[PersonaCreate]:
@@ -109,5 +123,5 @@ def get_mvp_personas() -> list[PersonaCreate]:
 
 
 def get_mvp_tasks() -> list[TaskCreate]:
-    """获取 MVP 验收样例 task 列表。"""
+    """获取 MVP 验收样例 task 列表。start_url 已解析为指向测试站点 ShopLab 的绝对地址。"""
     return MVP_TASKS

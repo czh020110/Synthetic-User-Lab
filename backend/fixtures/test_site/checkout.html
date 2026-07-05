@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>结算 - ShopLab</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #f7f8fa; color: #1f2937; line-height: 1.6; }
+  header { background: #111827; color: #fff; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header nav a { color: #d1d5db; text-decoration: none; margin-left: 20px; font-size: 14px; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 32px 16px; }
+  .checkout-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 32px; }
+  .section { background: #fff; border-radius: 10px; padding: 24px; margin-bottom: 20px; border: 1px solid #e5e7eb; }
+  .section h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #111827; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px; }
+  .form-field { margin-bottom: 12px; }
+  .form-field.full { grid-column: 1 / -1; }
+  .form-field label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; color: #374151; }
+  .form-field input, .form-field select { width: 100%; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+  .form-field input:focus, .form-field select:focus { outline: none; border-color: #2563eb; }
+  .shipping-options { display: flex; flex-direction: column; gap: 10px; }
+  .shipping-option { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; }
+  .shipping-option input { margin: 0; }
+  .summary { position: sticky; top: 20px; }
+  .summary-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; color: #4b5563; }
+  .summary-row.total { font-size: 18px; font-weight: 700; color: #111827; border-top: 2px solid #e5e7eb; margin-top: 8px; padding-top: 12px; }
+  .summary-row .shipping-line { color: #6b7280; font-size: 13px; }
+  /* 摩擦点：隐藏运费颜色压低，且默认勾选的"加急配送"会额外加价 */
+  .hidden-fee { color: #9ca3af; font-size: 12px; }
+  .btn { display: inline-block; padding: 13px 32px; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; text-decoration: none; transition: all .15s; width: 100%; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .error-box { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 6px; padding: 10px 14px; font-size: 13px; margin-top: 12px; display: none; }
+  .error-box.show { display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛍️ ShopLab</h1>
+  <nav>
+    <a href="index.html">首页</a>
+    <a href="product.html">商品</a>
+    <a href="checkout.html">结算</a>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="checkout-layout">
+    <!-- 左：表单 -->
+    <div>
+      <div class="section">
+        <h2>收货地址</h2>
+        <div class="form-row">
+          <div class="form-field">
+            <label for="name">姓名</label>
+            <input type="text" id="name" data-testid="ship-name" placeholder="收件人姓名"/>
+          </div>
+          <div class="form-field">
+            <label for="phone">手机号</label>
+            <input type="tel" id="phone" data-testid="ship-phone" placeholder="11 位手机号"/>
+          </div>
+        </div>
+        <div class="form-field full">
+          <label for="address">详细地址</label>
+          <input type="text" id="address" data-testid="ship-address" placeholder="省市区 + 详细地址"/>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>配送方式</h2>
+        <div class="shipping-options">
+          <label class="shipping-option">
+            <input type="radio" name="shipping" value="standard" data-testid="ship-standard"/>
+            <span>标准配送（3-5 天）- 免费</span>
+          </label>
+          <label class="shipping-option">
+            <input type="radio" name="shipping" value="express" data-testid="ship-express" checked/>
+            <span>加急配送（1-2 天）- ¥25</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>支付方式</h2>
+        <div class="form-field full">
+          <label for="pay-method">支付方式</label>
+          <select id="pay-method" data-testid="pay-method">
+            <option value="alipay">支付宝</option>
+            <option value="wechat">微信支付</option>
+            <option value="card">银行卡</option>
+          </select>
+        </div>
+        <div class="form-field full">
+          <label for="pay-account">支付账号 / 卡号</label>
+          <input type="text" id="pay-account" data-testid="pay-account" placeholder="请输入支付账号或银行卡号"/>
+        </div>
+        <div class="form-field full">
+          <label for="verify-code">验证码 <span style="color:#9ca3af;font-size:12px">(见页面底部提示)</span></label>
+          <input type="text" id="verify-code" data-testid="verify-code" placeholder="请输入 4 位验证码"/>
+        </div>
+      </div>
+
+      <!-- 摩擦点 4：验证码提示埋在页面底部，需要滚动才能看到，且位置远离输入框 -->
+      <div style="margin-top:60px;padding:80px 0;text-align:center;color:#9ca3af;font-size:13px" data-testid="verify-hint">
+        🔒 本订单验证码为：<strong style="color:#374151;font-size:16px">8204</strong>（请回到上方验证码输入框填写）
+      </div>
+    </div>
+
+    <!-- 右：订单摘要 -->
+    <div>
+      <div class="section summary">
+        <h2>订单摘要</h2>
+        <div class="summary-row">
+          <span>无线降噪耳机 Pro × 1</span>
+          <span>¥899</span>
+        </div>
+        <div class="summary-row">
+          <span>优惠</span>
+          <span>-¥0</span>
+        </div>
+        <div class="summary-row" data-testid="shipping-fee-row">
+          <span>运费 <span class="hidden-fee">(加急配送)</span></span>
+          <span data-testid="shipping-fee">¥25</span>
+        </div>
+        <!-- 摩擦点：默认勾选加急配送，运费 ¥25 默认加在总价里，用户不仔细看容易忽略 -->
+        <div class="summary-row total">
+          <span>合计</span>
+          <span data-testid="total-price">¥924</span>
+        </div>
+
+        <button class="btn btn-primary" id="submit-order" data-testid="submit-order" style="margin-top:16px">
+          确认支付
+        </button>
+
+        <div class="error-box" id="error-box" data-testid="error-box">
+          出错了，请检查后重试
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 运费联动
+const shippingRadios = document.querySelectorAll('input[name="shipping"]');
+const shippingFeeEl = document.querySelector('[data-testid="shipping-fee"]');
+const totalPriceEl = document.querySelector('[data-testid="total-price"]');
+const hiddenFeeEl = document.querySelector('.hidden-fee');
+const basePrice = 899;
+
+function currentTotal() {
+  const express = document.querySelector('[data-testid="ship-express"]').checked;
+  return { fee: express ? 25 : 0, express: express, total: basePrice + (express ? 25 : 0) };
+}
+
+function updateTotal() {
+  const { fee, express, total } = currentTotal();
+  shippingFeeEl.textContent = `¥${fee}`;
+  if (hiddenFeeEl) {
+    hiddenFeeEl.textContent = express ? '(加急配送)' : '(标准配送)';
+  }
+  totalPriceEl.textContent = `¥${total}`;
+}
+
+shippingRadios.forEach(r => r.addEventListener('change', updateTotal));
+updateTotal();
+
+// 摩擦点：模糊错误提示
+document.getElementById('submit-order').addEventListener('click', () => {
+  const name = document.getElementById('name').value.trim();
+  const phone = document.getElementById('phone').value.trim();
+  const address = document.getElementById('address').value.trim();
+  const account = document.getElementById('pay-account').value.trim();
+  const verify = document.getElementById('verify-code').value.trim();
+  const errorBox = document.getElementById('error-box');
+
+  if (!name || !phone || !address || !account || !verify) {
+    // 摩擦点：不告诉用户具体哪个字段缺失，只显示"出错了"
+    errorBox.classList.add('show');
+    return;
+  }
+
+  // 简单手机号校验，但错误提示仍然模糊
+  if (!/^\d{11}$/.test(phone)) {
+    errorBox.classList.add('show');
+    return;
+  }
+
+  // 验证码校验，错误提示仍然模糊
+  if (verify !== '8204') {
+    errorBox.classList.add('show');
+    return;
+  }
+
+  // 校验通过：把实际支付金额与配送方式带给成功页，避免成功页硬编码金额。
+  const { total, express } = currentTotal();
+  localStorage.setItem('sul_paid_amount', `¥${total}`);
+  localStorage.setItem('sul_shipping', express ? '加急配送（1-2 天）' : '标准配送（3-5 天）');
+  window.location.href = 'success.html';
+});
+</script>
+
+</body>
+</html>

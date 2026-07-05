@@ -501,6 +501,69 @@ def _drain_formal_background_tasks() -> None:
     asyncio.run(_wait())
 
 
+# ============================ 测试站点验收（S-008） ============================ #
+
+
+def check_test_site(report: AcceptanceReport) -> None:
+    """验收路径：自托管测试产品站点 ShopLab 可访问、含 UX 摩擦埋点，且 MVP 样例指向该站点。
+
+    不依赖 LLM/Playwright，仅校验站点页面结构与 MVP 样例 start_url 指向。
+    """
+
+    print("\n[路径 5] 测试产品站点 ShopLab 可访问性与摩擦埋点")
+    # 每个页面只请求一次，status 与内容复用同一响应，避免重复 HTTP 往返。
+    page_contents: dict[str, str] = {}
+    for page in ["/site/", "/site/index.html", "/site/product.html", "/site/checkout.html", "/site/success.html"]:
+        resp = client.get(page)
+        record(report, f"测试站点 {page} 可访问", resp.status_code == 200, f"status={resp.status_code}")
+        if resp.status_code == 200:
+            page_contents[page] = resp.text
+
+    index = page_contents.get("/site/index.html", "")
+    record(report, "首页含商品详情入口", "查看详情" in index and "product.html" in index)
+
+    product = page_contents.get("/site/product.html", "")
+    record(
+        report,
+        "商品页埋入摩擦点1(优惠券错误提示模糊)",
+        "coupon-input" in product and "操作失败，请重试" in product,
+    )
+
+    checkout = page_contents.get("/site/checkout.html", "")
+    # 用 ship-express 输入的 checked 属性串精确定位，避免匹配 JS 里的 .checked 字样。
+    record(
+        report,
+        "结算页埋入摩擦点2(默认勾选加急配送,运费计入总价)",
+        'data-testid="ship-express" checked' in checkout and "¥924" in checkout,
+    )
+    record(
+        report,
+        "结算页埋入摩擦点3(表单校验失败错误提示模糊)",
+        "出错了，请检查后重试" in checkout and "error-box" in checkout,
+    )
+    record(
+        report,
+        "结算页埋入摩擦点4(验证码提示埋在底部,需滚动可见)",
+        "verify-code" in checkout and "verify-hint" in checkout and "8204" in checkout,
+    )
+
+    success = page_contents.get("/site/success.html", "")
+    record(
+        report,
+        "成功页含订单号与支付金额(成功判定依据)",
+        "支付成功" in success and "order-id" in success and "paid-amount" in success,
+    )
+
+    tasks = get_mvp_tasks()
+    site_urls = [t.start_url for t in tasks]
+    record(
+        report,
+        "MVP 样例 task start_url 全部指向测试站点",
+        all("/site/" in u for u in site_urls),
+        f"urls={site_urls}",
+    )
+
+
 # ============================ 验收报告渲染 ============================ #
 
 
@@ -563,6 +626,7 @@ def run_acceptance() -> AcceptanceReport:
         check_formal_run_path(report)
         check_error_branches(report)
         check_knowledge_retrieval(report)
+        check_test_site(report)
     except Exception as exc:  # noqa: BLE001 - 验收脚本需捕获中断并记录
         traceback.print_exc()
         record(report, "验收流程未中断", False, f"{type(exc).__name__}: {exc}")

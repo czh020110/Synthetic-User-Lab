@@ -34,7 +34,8 @@ def test_mvp_tasks_have_required_fields():
     for task_create in tasks:
         assert task_create.name
         assert task_create.description
-        assert task_create.start_url.startswith("https://")
+        assert task_create.start_url.startswith("http://") or task_create.start_url.startswith("https://")
+        assert "/site/" in task_create.start_url
         assert len(task_create.success_criteria) > 0
         assert task_create.max_steps >= 1
         assert len(task_create.allowed_actions) > 0
@@ -62,9 +63,9 @@ def test_mvp_tasks_diversity():
     tasks = get_mvp_tasks()
 
     names = [t.name for t in tasks]
-    assert "注册新账号" in names
-    assert "添加商品到购物车" in names
-    assert "修改个人设置" in names
+    assert "浏览商品并完成下单" in names
+    assert "使用优惠券购买商品" in names
+    assert "填写结算表单完成支付" in names
 
     # 验证风险等级差异
     risk_levels = [t.risk_level for t in tasks]

@@ -48,7 +48,7 @@ async def seed_mvp_samples() -> None:
         print(f"  ✅ 创建 Persona: {persona.name} (ID: {persona.id})")
         created_personas += 1
 
-    # 初始化 task
+    # 初始化 task（start_url 已解析为指向测试站点 ShopLab 的绝对地址）
     tasks = get_mvp_tasks()
     created_tasks = 0
 

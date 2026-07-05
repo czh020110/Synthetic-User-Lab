@@ -27,6 +27,7 @@ class Settings(BaseModel):
     browser_headless: bool
     run_step_limit: int
     demo_site_dir: Path
+    test_site_dir: Path
     screenshot_dir: Path
     database_url: Path
     cors_origins: list[str]
@@ -56,6 +57,7 @@ def get_settings() -> Settings:
         browser_headless=os.getenv("SYNTHETIC_USER_LAB_HEADLESS", "true").lower() != "false",
         run_step_limit=int(os.getenv("SYNTHETIC_USER_LAB_RUN_STEP_LIMIT", "8")),
         demo_site_dir=BASE_DIR / "backend" / "fixtures" / "demo_site",
+        test_site_dir=BASE_DIR / "backend" / "fixtures" / "test_site",
         screenshot_dir=BASE_DIR / "screenshots",
         database_url=Path(os.getenv("SYNTHETIC_USER_LAB_DATABASE_URL", str(BASE_DIR / "data" / "synthetic_user_lab.db"))),
         cors_origins=[s.strip() for s in os.getenv("SYNTHETIC_USER_LAB_CORS_ORIGINS", "http://localhost:5173").split(",") if s.strip()],
@@ -67,6 +69,7 @@ def get_settings() -> Settings:
         fast_model_name=model_router.fast_model_name,
     )
     settings.demo_site_dir.mkdir(parents=True, exist_ok=True)
+    settings.test_site_dir.mkdir(parents=True, exist_ok=True)
     settings.screenshot_dir.mkdir(parents=True, exist_ok=True)
     if str(settings.database_url) != ":memory:":
         settings.database_url.parent.mkdir(parents=True, exist_ok=True)

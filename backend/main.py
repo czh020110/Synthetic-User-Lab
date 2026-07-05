@@ -53,3 +53,4 @@ app.add_middleware(
 )
 app.include_router(api_router, prefix=settings.api_prefix)
 app.mount("/demo", StaticFiles(directory=settings.demo_site_dir, html=True), name="demo")
+app.mount("/site", StaticFiles(directory=settings.test_site_dir, html=True), name="test_site")
