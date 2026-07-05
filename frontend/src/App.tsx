@@ -13,6 +13,7 @@ import PersonaDetailPage from './pages/PersonaDetailPage';
 import TaskDetailPage from './pages/TaskDetailPage';
 import KnowledgeDetailPage from './pages/KnowledgeDetailPage';
 import StartRunPage from './pages/StartRunPage';
+import CompareReportPage from './pages/CompareReportPage';
 import RunDetailPage from './pages/RunDetailPage';
 import ReportPage from './pages/ReportPage';
 import SettingsPage from './pages/SettingsPage';
@@ -43,6 +44,7 @@ function App() {
               <Route path="/entities/tasks/:id" element={<TaskDetailPage />} />
               <Route path="/entities/knowledge/:id" element={<KnowledgeDetailPage />} />
               <Route path="/runs/new" element={<StartRunPage />} />
+              <Route path="/runs/compare" element={<CompareReportPage />} />
               <Route path="/runs/:runId" element={<RunDetailPage />} />
               <Route path="/runs/:runId/report" element={<ReportPage />} />
               <Route path="/settings" element={<SettingsPage />} />

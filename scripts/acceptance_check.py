@@ -34,6 +34,7 @@ sys.path.insert(0, str(project_root))
 
 from fastapi.testclient import TestClient
 
+from backend.analysis.compare_report import build_compare_report
 from backend.execution.action_guard import is_destructive_action
 from backend.fixtures.mvp_samples import get_mvp_personas, get_mvp_tasks
 from backend.main import app
@@ -50,6 +51,7 @@ from backend.schemas.run_schemas import (
     ObservedPageState,
     RetrievedContextItem,
     RunRecord,
+    RunReport,
     RunRequest,
     StepLog,
     Task,
@@ -564,6 +566,97 @@ def check_test_site(report: AcceptanceReport) -> None:
     )
 
 
+# ============================ batch run 与对比报告验收（S-009） ============================ #
+
+
+def check_batch_compare(report: AcceptanceReport) -> None:
+    """验收路径:batch run 与跨 persona 对比报告(S-009)。
+
+    不依赖 LLM:batch run 注入受控 workflow,对比报告聚合用纯代码验证。
+    """
+
+    print("\n[路径 6] batch run 与跨 persona 对比报告")
+    entity_store = get_entity_store()
+    personas = []
+    for i in range(3):
+        persona = Persona(name=f"批量用户{i}", skill_level="intermediate")
+        entity_store.create_persona(persona)
+        personas.append(persona)
+    task = Task(name="批量对比任务", start_url="http://testserver", max_steps=5)
+    entity_store.create_task(task)
+
+    # === batch API:受控 workflow,3 个 persona → 3 个 run ===
+    with patch("backend.api.routes.runs.run_formal_workflow", new=_scripted_formal_workflow):
+        batch_resp = client.post("/api/v1/runs/batch", json={
+            "task_id": task.id,
+            "persona_ids": [p.id for p in personas],
+            "run_name": "acceptance-batch",
+        })
+    record(report, "POST /runs/batch 返回 200", batch_resp.status_code == 200, batch_resp.text)
+    batch_data = batch_resp.json().get("data", {})
+    run_ids = batch_data.get("run_ids", [])
+    record(report, "batch 返回 3 个 run_id", len(run_ids) == 3, f"len={len(run_ids)}")
+    record(report, "batch 返回 task_id 一致", batch_data.get("task_id") == task.id)
+
+    _drain_formal_background_tasks()
+
+    all_succeeded = all(
+        client.get(f"/api/v1/runs/{rid}").json().get("data", {}).get("status") == "succeeded"
+        for rid in run_ids
+    )
+    record(report, "batch 启动的 3 个 run 全部 succeeded", all_succeeded)
+
+    # === compare API:对这 3 个 run 聚合 ===
+    compare_resp = client.post("/api/v1/runs/compare", json={"run_ids": run_ids})
+    record(report, "POST /runs/compare 返回 200", compare_resp.status_code == 200, compare_resp.text)
+    compare_data = compare_resp.json().get("data", {})
+    record(report, "对比报告 run_count=3", compare_data.get("run_count") == 3, f"run_count={compare_data.get('run_count')}")
+    record(report, "对比报告 success_count=3", compare_data.get("success_count") == 3)
+    record(report, "对比报告 conclusion_distribution 全 keep",
+           compare_data.get("conclusion_distribution") == {"keep": 3, "optimize": 0, "fix": 0},
+           f"dist={compare_data.get('conclusion_distribution')}")
+    record(report, "对比报告 items 数量=3", len(compare_data.get("items", [])) == 3)
+    record(report, "对比报告含 comparison_summary", bool(compare_data.get("comparison_summary")))
+
+    # === 聚合多样性:直接 store 写入不同结论的 run,验证纯函数聚合 ===
+    store = get_run_store()
+
+    def _make_compare_run(persona, *, success, conclusion, total_steps, friction_signals=None) -> str:
+        run_id = f"acceptance-compare-{persona.id}"
+        rec = RunRecord(run_id=run_id, request=RunRequest(run_name="compare"), persona=persona, task=task)
+        store.create_run(rec)
+        rep = RunReport(
+            run_id=run_id,
+            status="succeeded" if success else "failed",
+            summary=f"{conclusion} 演示 run",
+            success=success,
+            conclusion=conclusion,
+            persona=persona,
+            task=task,
+            total_steps=total_steps,
+            friction_signals=friction_signals or [],
+        )
+        store.complete_run(run_id, rep)
+        return run_id
+
+    r_keep = _make_compare_run(personas[0], success=True, conclusion="keep", total_steps=3)
+    r_opt = _make_compare_run(personas[1], success=True, conclusion="optimize", total_steps=5, friction_signals=["stuck_page"])
+    r_fix = _make_compare_run(personas[2], success=False, conclusion="fix", total_steps=7)
+
+    cmp = build_compare_report([r_keep, r_opt, r_fix], store)
+    record(report, "纯函数聚合 run_count=3", cmp.run_count == 3)
+    record(report, "纯函数聚合 success_count=2", cmp.success_count == 2)
+    record(report, "纯函数聚合 conclusion_distribution={keep:1,optimize:1,fix:1}",
+           cmp.conclusion_distribution == {"keep": 1, "optimize": 1, "fix": 1},
+           f"dist={cmp.conclusion_distribution}")
+    record(report, "纯函数聚合 avg_steps=5.0", cmp.avg_steps == 5.0, f"avg={cmp.avg_steps}")
+    record(report, "纯函数聚合 total_friction_signals=1", cmp.total_friction_signals == 1)
+
+    # === 错误分支:compare 不存在 run → 404 ===
+    not_found_resp = client.post("/api/v1/runs/compare", json={"run_ids": [r_keep, "ghost"]})
+    record(report, "compare 不存在 run 返回 404", not_found_resp.status_code == 404, f"code={not_found_resp.status_code}")
+
+
 # ============================ 验收报告渲染 ============================ #
 
 
@@ -627,6 +720,7 @@ def run_acceptance() -> AcceptanceReport:
         check_error_branches(report)
         check_knowledge_retrieval(report)
         check_test_site(report)
+        check_batch_compare(report)
     except Exception as exc:  # noqa: BLE001 - 验收脚本需捕获中断并记录
         traceback.print_exc()
         record(report, "验收流程未中断", False, f"{type(exc).__name__}: {exc}")

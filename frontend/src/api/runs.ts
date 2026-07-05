@@ -1,12 +1,19 @@
 import client from './client';
-import type { RunStatusResponse, RunStartResponse, FormalRunRequest, RunRequest } from '../types/run';
-import type { StepLog } from '../types/report';
-import type { RunReport } from '../types/report';
+import type { RunStatusResponse, RunStartResponse, FormalRunRequest, RunRequest, BatchRunRequest, BatchRunResponse } from '../types/run';
+import type { StepLog, RunReport, CompareReport } from '../types/report';
 
 // ============================ Formal Runs ============================ //
 
 export function startFormalRun(data: FormalRunRequest): Promise<RunStartResponse> {
   return client.post('/runs/start', data);
+}
+
+export function startBatchRun(data: BatchRunRequest): Promise<BatchRunResponse> {
+  return client.post('/runs/batch', data);
+}
+
+export function compareRuns(runIds: string[]): Promise<CompareReport> {
+  return client.post('/runs/compare', { run_ids: runIds });
 }
 
 export function listRuns(): Promise<RunStatusResponse[]> {

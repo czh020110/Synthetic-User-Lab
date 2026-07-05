@@ -443,3 +443,54 @@ class RunStatusResponse(BaseModel):
     updated_at: datetime
     error_type: RunErrorType | None = None
     error_message: str | None = None
+
+
+class BatchRunRequest(BaseModel):
+    """批量 run 请求体：同一 task 按多个 persona 发起 run。"""
+
+    task_id: str = Field(..., min_length=1)
+    persona_ids: list[str] = Field(..., min_length=1)
+    run_name: str = Field(default="run")
+    headless: bool | None = None
+
+
+class BatchRunResponse(BaseModel):
+    """批量 run 启动结果。"""
+
+    run_ids: list[str]
+    task_id: str
+
+
+class CompareRunRequest(BaseModel):
+    """对比报告请求体：对一组同 task 的已完成 run 聚合对比。"""
+
+    run_ids: list[str] = Field(..., min_length=2)
+
+
+class CompareItem(BaseModel):
+    """对比报告中单个 run 的摘要条目。"""
+
+    run_id: str
+    persona: Persona
+    success: bool
+    conclusion: ReportConclusion
+    total_steps: int
+    friction_signal_count: int
+    friction_issue_count: int
+    friction_signals: list[str] = Field(default_factory=list)
+    friction_issues: list[FrictionIssue] = Field(default_factory=list)
+    summary: str
+    key_findings: list[str] = Field(default_factory=list)
+
+
+class CompareReport(BaseModel):
+    """跨 persona 对比报告。"""
+
+    task: Task
+    run_count: int
+    success_count: int
+    conclusion_distribution: dict[str, int]  # {keep: n, optimize: n, fix: n}
+    avg_steps: float
+    total_friction_signals: int
+    items: list[CompareItem]
+    comparison_summary: str

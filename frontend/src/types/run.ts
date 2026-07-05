@@ -41,3 +41,15 @@ export interface RunRecord {
   error_type?: RunErrorType | null;
   error_message?: string | null;
 }
+
+export interface BatchRunRequest {
+  task_id: string;
+  persona_ids: string[];
+  run_name?: string;
+  headless?: boolean | null;
+}
+
+export interface BatchRunResponse {
+  run_ids: string[];
+  task_id: string;
+}

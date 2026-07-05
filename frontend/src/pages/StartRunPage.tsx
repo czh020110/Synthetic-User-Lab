@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { usePersonas } from '../hooks/usePersonas';
 import { useTasks } from '../hooks/useTasks';
-import { useStartFormalRun } from '../hooks/useRuns';
+import { useStartFormalRun, useStartBatchRun } from '../hooks/useRuns';
 
 const { Text, Title } = Typography;
 
@@ -17,13 +17,14 @@ export default function StartRunPage() {
   const { data: personas } = usePersonas();
   const { data: tasks } = useTasks();
   const startRun = useStartFormalRun();
+  const startBatch = useStartBatchRun();
   const [form] = Form.useForm();
 
   // 当 persona/task 列表加载完成后再回填预选值，
   // 避免 initialValues 早于 options 就绪导致 Select 选不中。
   useEffect(() => {
     if (preselectedPersona && personas?.some(p => p.id === preselectedPersona)) {
-      form.setFieldValue('persona_id', preselectedPersona);
+      form.setFieldValue('persona_ids', [preselectedPersona]);
     }
   }, [personas, preselectedPersona, form]);
 
@@ -34,15 +35,31 @@ export default function StartRunPage() {
   }, [tasks, preselectedTask, form]);
 
   const handleSubmit = async (values: any) => {
+    const personaIds: string[] = values.persona_ids || [];
+    const runName = values.run_name || 'run';
+    const headless = values.headless ? true : undefined;
     try {
-      const result = await startRun.mutateAsync({
-        persona_id: values.persona_id,
-        task_id: values.task_id,
-        run_name: values.run_name || 'run',
-        headless: values.headless ? true : undefined,
-      });
-      message.success('Run 已启动');
-      navigate(`/runs/${result.run_id}`);
+      if (personaIds.length === 1) {
+        // 单 persona 走原有单 run 流程
+        const result = await startRun.mutateAsync({
+          persona_id: personaIds[0],
+          task_id: values.task_id,
+          run_name: runName,
+          headless,
+        });
+        message.success('Run 已启动');
+        navigate(`/runs/${result.run_id}`);
+      } else {
+        // 多 persona 走批量 run，启动后跳转对比报告页
+        const result = await startBatch.mutateAsync({
+          task_id: values.task_id,
+          persona_ids: personaIds,
+          run_name: runName,
+          headless,
+        });
+        message.success(`已启动 ${result.run_ids.length} 个 run`);
+        navigate(`/runs/compare?ids=${result.run_ids.join(',')}`);
+      }
     } catch (err) {
       message.error(`启动失败: ${(err as Error).message}`);
     }
@@ -50,6 +67,7 @@ export default function StartRunPage() {
 
   const personasEmpty = personas && personas.length === 0;
   const tasksEmpty = tasks && tasks.length === 0;
+  const submitting = startRun.isPending || startBatch.isPending;
 
   return (
     <div>
@@ -67,7 +85,7 @@ export default function StartRunPage() {
           </Title>
         </div>
         <Text style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>
-          选择 Persona 和 Task 启动一次正式运行
+          选择 Persona 和 Task 启动一次正式运行；选多个 Persona 可发起批量对比
         </Text>
       </div>
 
@@ -117,19 +135,20 @@ export default function StartRunPage() {
               initialValues={{
                 run_name: 'run',
                 headless: true,
-                persona_id: preselectedPersona || undefined,
+                persona_ids: preselectedPersona ? [preselectedPersona] : [],
                 task_id: preselectedTask || undefined,
               }}
               onFinish={handleSubmit}
             >
               <Form.Item
-                name="persona_id"
-                label={<Text strong style={{ fontSize: 14 }}>Persona</Text>}
-                rules={[{ required: true, message: '请选择 Persona' }]}
+                name="persona_ids"
+                label={<Text strong style={{ fontSize: 14 }}>Persona（可多选对比）</Text>}
+                rules={[{ required: true, message: '请至少选择一个 Persona', type: 'array' }]}
               >
                 <Select
+                  mode="multiple"
                   size="middle"
-                  placeholder="Select a persona"
+                  placeholder="选择一个或多个 persona"
                   loading={!personas}
                   options={(personas || []).map((p) => ({
                     value: p.id,
@@ -190,7 +209,7 @@ export default function StartRunPage() {
                   <Button
                     type="primary"
                     htmlType="submit"
-                    loading={startRun.isPending}
+                    loading={submitting}
                     className="btn-primary-gradient"
                     icon={<RocketOutlined />}
                   >
@@ -209,10 +228,10 @@ export default function StartRunPage() {
                 <Text strong>Tips</Text>
               </div>
               <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.8 }}>
+                <li>选择多个 Persona 可发起批量 run 并生成对比报告</li>
                 <li>选择与任务难度匹配的 Persona</li>
                 <li>高风险任务会自动启用安全护栏</li>
                 <li>Headless 模式运行更快</li>
-                <li>Run 名称便于后续查找</li>
               </ul>
             </Card>
 

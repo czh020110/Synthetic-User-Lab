@@ -115,3 +115,30 @@ export interface StepLog {
   before_page_state: ObservedPageState;
   after_page_state: ObservedPageState;
 }
+
+// ============================ Compare Report ============================ #
+
+export interface CompareItem {
+  run_id: string;
+  persona: Persona;
+  success: boolean;
+  conclusion: ReportConclusion;
+  total_steps: number;
+  friction_signal_count: number;
+  friction_issue_count: number;
+  friction_signals: string[];
+  friction_issues: FrictionIssue[];
+  summary: string;
+  key_findings: string[];
+}
+
+export interface CompareReport {
+  task: Task;
+  run_count: number;
+  success_count: number;
+  conclusion_distribution: Record<string, number>;
+  avg_steps: number;
+  total_friction_signals: number;
+  items: CompareItem[];
+  comparison_summary: string;
+}

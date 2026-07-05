@@ -3,7 +3,7 @@ from __future__ import annotations
 # ============================ 正式 Run 路由模块 ============================ #
 # 模块功能: 提供引用 persona_id/task_id 的正式 run 启动和查询接口
 # 模块数据流: HTTP 请求 -> EntityStore 解析 -> RunStore 创建 -> 后台执行 -> HTTP 响应
-# 模块接口说明: start/status/steps/report 接口覆盖正式 run 闭环查询面
+# 模块接口说明: start/batch/compare/status/steps/report 接口覆盖正式 run 闭环查询面
 
 import asyncio
 import logging
@@ -11,9 +11,25 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 
+from backend.analysis.compare_report import (
+    RunNotFoundError,
+    RunNotReadyError,
+    TaskMismatchError,
+    build_compare_report,
+)
 from backend.core.config import get_settings
 from backend.graph.formal_run_graph import run_formal_workflow
-from backend.schemas.run_schemas import ApiResponse, FormalRunRequest, RunRecord, RunRequest
+from backend.schemas.run_schemas import (
+    ApiResponse,
+    BatchRunRequest,
+    BatchRunResponse,
+    CompareRunRequest,
+    FormalRunRequest,
+    Persona,
+    RunRecord,
+    RunRequest,
+    Task,
+)
 from backend.stores import get_entity_store, get_run_store
 
 logger = logging.getLogger(__name__)
@@ -46,28 +62,21 @@ def _track_background_task(run_id: str, task: asyncio.Task) -> None:
     task.add_done_callback(handle_done)
 
 
-@router.post("/start", response_model=ApiResponse)
-async def start_formal_run(request: Request, payload: FormalRunRequest) -> ApiResponse:
-    """创建正式 run 并异步执行。需要提供 persona_id 和 task_id。"""
+def _create_and_launch_run(
+    persona: Persona,
+    task: Task,
+    run_request: RunRequest,
+    app_base_url: str,
+) -> str:
+    """创建 RunRecord 并启动后台 formal workflow，返回 run_id。
 
-    entity_store = get_entity_store()
-    run_store = get_run_store()
-
-    # 解析 persona 和 task
-    persona = entity_store.get_persona(payload.persona_id)
-    if persona is None:
-        raise HTTPException(status_code=404, detail=f"Persona not found: {payload.persona_id}")
-    task = entity_store.get_task(payload.task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail=f"Task not found: {payload.task_id}")
+    单 run 与 batch run 共用此逻辑，保证两条启动路径行为一致。
+    """
 
     settings = get_settings()
     run_id = str(uuid4())
-    app_base_url = str(request.base_url).rstrip("/")
-    run_request = RunRequest(run_name=payload.run_name, headless=payload.headless)
-
     record = RunRecord(run_id=run_id, request=run_request, persona=persona, task=task)
-    run_store.create_run(record)
+    get_run_store().create_run(record)
 
     task_coro = asyncio.create_task(
         run_formal_workflow(
@@ -81,7 +90,66 @@ async def start_formal_run(request: Request, payload: FormalRunRequest) -> ApiRe
         )
     )
     _track_background_task(run_id, task_coro)
+    return run_id
+
+
+@router.post("/start", response_model=ApiResponse)
+async def start_formal_run(request: Request, payload: FormalRunRequest) -> ApiResponse:
+    """创建正式 run 并异步执行。需要提供 persona_id 和 task_id。"""
+
+    entity_store = get_entity_store()
+
+    persona = entity_store.get_persona(payload.persona_id)
+    if persona is None:
+        raise HTTPException(status_code=404, detail=f"Persona not found: {payload.persona_id}")
+    task = entity_store.get_task(payload.task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task not found: {payload.task_id}")
+
+    app_base_url = str(request.base_url).rstrip("/")
+    run_request = RunRequest(run_name=payload.run_name, headless=payload.headless)
+    run_id = _create_and_launch_run(persona, task, run_request, app_base_url)
     return ApiResponse(data={"run_id": run_id, "status": "queued"})
+
+
+@router.post("/batch", response_model=ApiResponse)
+async def start_batch_run(request: Request, payload: BatchRunRequest) -> ApiResponse:
+    """对同一 task 按多个 persona 批量发起 run，返回各 run_id。"""
+
+    entity_store = get_entity_store()
+
+    task = entity_store.get_task(payload.task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task not found: {payload.task_id}")
+
+    personas = []
+    for persona_id in payload.persona_ids:
+        persona = entity_store.get_persona(persona_id)
+        if persona is None:
+            raise HTTPException(status_code=404, detail=f"Persona not found: {persona_id}")
+        personas.append(persona)
+
+    app_base_url = str(request.base_url).rstrip("/")
+    run_request = RunRequest(run_name=payload.run_name, headless=payload.headless)
+    run_ids = [
+        _create_and_launch_run(persona, task, run_request, app_base_url) for persona in personas
+    ]
+    return ApiResponse(data=BatchRunResponse(run_ids=run_ids, task_id=payload.task_id))
+
+
+@router.post("/compare", response_model=ApiResponse)
+async def compare_runs(payload: CompareRunRequest) -> ApiResponse:
+    """对一组同 task 的已完成 run 聚合跨 persona 对比报告。"""
+
+    try:
+        report = build_compare_report(payload.run_ids, get_run_store())
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RunNotReadyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except TaskMismatchError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ApiResponse(data=report)
 
 
 @router.get("/", response_model=ApiResponse)
