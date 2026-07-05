@@ -1,12 +1,15 @@
-import { Card, Timeline, Image } from 'antd';
+import { Card, Timeline, Image, Typography, Badge } from 'antd';
 import { CheckCircleFilled, CloseCircleFilled, ClockCircleOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import type { StepLog } from '../../types/report';
 import { screenshotPathToUrl } from '../../api/screenshots';
 import dayjs from 'dayjs';
 
+const { Text } = Typography;
+
 export default function StepTimeline({ steps }: { steps: StepLog[] }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [expandedStep, setExpandedStep] = useState<number | null>(null);
 
   const items = steps.map((step) => {
     const status = step.validation_result?.status || 'pending';
@@ -25,11 +28,15 @@ export default function StepTimeline({ steps }: { steps: StepLog[] }) {
     const actionType = step.decided_action?.action || 'unknown';
     const actionReason = step.decided_action?.reason || '';
     const progressSummary = step.validation_result?.progress_summary || '';
+    const isExpanded = expandedStep === step.step_index;
 
     return {
       dot,
       children: (
-        <div>
+        <div
+          style={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => setExpandedStep(isExpanded ? null : step.step_index)}
+        >
           <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text-primary)' }}>
             Step {step.step_index}: {actionType}
           </div>
@@ -38,47 +45,65 @@ export default function StepTimeline({ steps }: { steps: StepLog[] }) {
               {actionReason}
             </div>
           )}
-          {progressSummary && (
-            <div style={{
-              marginTop: 6,
-              padding: '6px 10px',
-              background: 'var(--color-bg)',
-              borderRadius: 4,
-              fontSize: 12,
-              color: 'var(--color-text-secondary)',
-            }}>
-              {progressSummary}
+
+          {/* Collapsible content */}
+          <div style={{
+            maxHeight: isExpanded ? 1000 : 0,
+            overflow: 'hidden',
+            transition: 'max-height 0.3s ease',
+          }}>
+            {progressSummary && (
+              <div style={{
+                marginTop: 6,
+                padding: '6px 10px',
+                background: 'var(--color-bg)',
+                borderRadius: 4,
+                fontSize: 12,
+                color: 'var(--color-text-secondary)',
+              }}>
+                {progressSummary}
+              </div>
+            )}
+            {step.execution_result?.error_message && (
+              <div style={{
+                marginTop: 4,
+                padding: '6px 10px',
+                background: '#fff2f0',
+                borderRadius: 4,
+                fontSize: 12,
+                color: 'var(--color-error)',
+              }}>
+                {step.execution_result.error_message}
+              </div>
+            )}
+            {screenshotUrl && (
+              <img
+                src={screenshotUrl}
+                alt={`Step ${step.step_index}`}
+                style={{
+                  marginTop: 8,
+                  maxWidth: '200px',
+                  borderRadius: 6,
+                  border: '1px solid var(--color-border)',
+                  cursor: 'pointer',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewUrl(screenshotUrl);
+                }}
+              />
+            )}
+            <div style={{ marginTop: 4, fontSize: 11, color: 'var(--color-text-muted)' }}>
+              {dayjs(step.before_page_state?.current_url).format('HH:mm:ss')}
             </div>
-          )}
-          {step.execution_result?.error_message && (
-            <div style={{
-              marginTop: 4,
-              padding: '6px 10px',
-              background: '#fff2f0',
-              borderRadius: 4,
-              fontSize: 12,
-              color: 'var(--color-error)',
-            }}>
-              {step.execution_result.error_message}
-            </div>
-          )}
-          {screenshotUrl && (
-            <img
-              src={screenshotUrl}
-              alt={`Step ${step.step_index}`}
-              style={{
-                marginTop: 8,
-                maxWidth: '200px',
-                borderRadius: 6,
-                border: '1px solid var(--color-border)',
-                cursor: 'pointer',
-              }}
-              onClick={() => setPreviewUrl(screenshotUrl)}
-            />
-          )}
-          <div style={{ marginTop: 4, fontSize: 11, color: 'var(--color-text-muted)' }}>
-            {dayjs(step.before_page_state?.current_url).format('HH:mm:ss')}
           </div>
+
+          {/* Expand hint */}
+          {!isExpanded && (
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 2 }}>
+              Click to expand
+            </Text>
+          )}
         </div>
       ),
     };
@@ -86,6 +111,12 @@ export default function StepTimeline({ steps }: { steps: StepLog[] }) {
 
   return (
     <Card>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Text style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text-primary)' }}>
+          Step Timeline
+        </Text>
+        <Badge count={steps.length} style={{ backgroundColor: 'var(--color-bg)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }} />
+      </div>
       <Timeline items={items} />
       <Image
         src={previewUrl || ''}

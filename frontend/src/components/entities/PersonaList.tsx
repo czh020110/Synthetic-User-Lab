@@ -1,9 +1,10 @@
-import { Button, Space, Card, Typography, Modal, Tag, Avatar } from 'antd';
-import { PlusOutlined, UserOutlined } from '@ant-design/icons';
+import { Button, Space, Card, Typography, Modal, Tag, Avatar, Tooltip } from 'antd';
+import { PlusOutlined, UserOutlined, EyeOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { usePersonas, useDeletePersona } from '../../hooks/usePersonas';
 import type { Persona } from '../../types/persona';
 import PersonaForm from './forms/PersonaForm';
+import EntityDetailDrawer from './EntityDetailDrawer';
 
 const { Text } = Typography;
 
@@ -12,6 +13,7 @@ export default function PersonaList() {
   const deletePersona = useDeletePersona();
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<Persona | null>(null);
+  const [detailItem, setDetailItem] = useState<Persona | null>(null);
 
   const items = personas ?? [];
 
@@ -92,6 +94,16 @@ export default function PersonaList() {
                   </div>
                 </div>
                 <Space>
+                  <Tooltip title="View Detail">
+                    <Button
+                      size="small"
+                      type="link"
+                      icon={<EyeOutlined />}
+                      onClick={() => setDetailItem(p)}
+                    >
+                      View
+                    </Button>
+                  </Tooltip>
                   <Button size="small" type="link" onClick={() => { setEditItem(p); setModalOpen(true); }}>
                     Edit
                   </Button>
@@ -122,6 +134,13 @@ export default function PersonaList() {
         open={modalOpen}
         editItem={editItem}
         onClose={() => { setModalOpen(false); setEditItem(null); }}
+      />
+
+      <EntityDetailDrawer
+        entity={detailItem}
+        type="persona"
+        open={!!detailItem}
+        onClose={() => setDetailItem(null)}
       />
     </div>
   );

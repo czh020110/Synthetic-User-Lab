@@ -1,5 +1,5 @@
-import { Card, Typography, Spin, Result, Button, Badge, Tag } from 'antd';
-import { FileSearchOutlined, ArrowLeftOutlined, CalendarOutlined } from '@ant-design/icons';
+import { Card, Typography, Spin, Result, Button, Badge, Tag, Space, Breadcrumb } from 'antd';
+import { FileSearchOutlined, ArrowLeftOutlined, CalendarOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useRunDetail } from '../hooks/useRunDetail';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -27,6 +27,11 @@ export default function RunDetailPage() {
   const status = statusQuery.data;
   const steps = stepsQuery.data;
 
+  const handleRefresh = () => {
+    statusQuery.refetch();
+    stepsQuery.refetch();
+  };
+
   if (statusQuery.isLoading) {
     return (
       <div className="loading-container">
@@ -40,10 +45,21 @@ export default function RunDetailPage() {
   }
 
   const isFinished = status.status === 'succeeded' || status.status === 'failed';
+  const isRunning = status.status === 'running';
+  const isQueued = status.status === 'queued';
   const displayId = runId && runId.length > 12 ? `${runId.slice(0, 12)}…` : runId || '';
 
   return (
     <div>
+      {/* Breadcrumb */}
+      <Breadcrumb
+        style={{ marginBottom: 16 }}
+        items={[
+          { title: <span style={{ cursor: 'pointer' }} onClick={() => navigate('/')}>Dashboard</span> },
+          { title: <span>Run {displayId}</span> },
+        ]}
+      />
+
       {/* Header */}
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
@@ -57,6 +73,9 @@ export default function RunDetailPage() {
             Run Detail
           </Title>
         </div>
+        <Text style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>
+          {isDemo ? 'Demo Run' : 'Formal Run'} — {statusLabels[status.status]}
+        </Text>
       </div>
 
       {/* Status Card */}
@@ -78,6 +97,13 @@ export default function RunDetailPage() {
           </Text>
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={handleRefresh}
+              loading={statusQuery.isFetching || stepsQuery.isFetching}
+            >
+              Refresh
+            </Button>
             {isFinished && (
               <Button
                 type="primary"
@@ -100,27 +126,49 @@ export default function RunDetailPage() {
             <p style={{ margin: 0, color: '#666', fontSize: 13 }}>{status.error_message}</p>
           </div>
         )}
+
+        {/* Progress indicator */}
+        {(isRunning || isQueued) && (
+          <div style={{ marginTop: 16, padding: 16, background: '#f6ffed', borderRadius: 8, border: '1px solid #b7eb8f' }}>
+            <Space>
+              <Spin size="small" />
+              <Text style={{ color: '#52c41a', fontWeight: 500 }}>
+                {isRunning ? '执行中...步骤数据实时更新' : '等待执行...'}
+              </Text>
+            </Space>
+          </div>
+        )}
       </Card>
 
       {/* Steps Section */}
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <Title level={4} style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-            Steps
-          </Title>
-          {steps && (
-            <Badge
-              count={steps.length}
-              style={{
-                backgroundColor: 'var(--color-bg)',
-                color: 'var(--color-text-muted)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 10,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            />
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Title level={4} style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              Steps
+            </Title>
+            {steps && (
+              <Badge
+                count={steps.length}
+                style={{
+                  backgroundColor: 'var(--color-bg)',
+                  color: 'var(--color-text-muted)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 10,
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              />
+            )}
+          </div>
+          <Button
+            icon={<ReloadOutlined />}
+            size="small"
+            onClick={() => stepsQuery.refetch()}
+            loading={stepsQuery.isFetching}
+          >
+            Refresh Steps
+          </Button>
         </div>
 
         {stepsQuery.isLoading ? (

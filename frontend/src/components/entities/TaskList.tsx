@@ -1,9 +1,10 @@
-import { Button, Space, Card, Typography, Modal, Tag, Avatar } from 'antd';
-import { PlusOutlined, FileTextOutlined } from '@ant-design/icons';
+import { Button, Space, Card, Typography, Modal, Tag, Avatar, Tooltip } from 'antd';
+import { PlusOutlined, FileTextOutlined, EyeOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { useTasks, useDeleteTask } from '../../hooks/useTasks';
 import TaskForm from './forms/TaskForm';
 import type { Task } from '../../types/task';
+import EntityDetailDrawer from './EntityDetailDrawer';
 
 const { Text } = Typography;
 
@@ -12,6 +13,7 @@ export default function TaskList() {
   const deleteTask = useDeleteTask();
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<Task | null>(null);
+  const [detailItem, setDetailItem] = useState<Task | null>(null);
 
   const items = tasks ?? [];
 
@@ -110,6 +112,16 @@ export default function TaskList() {
                   </div>
                 </div>
                 <Space>
+                  <Tooltip title="View Detail">
+                    <Button
+                      size="small"
+                      type="link"
+                      icon={<EyeOutlined />}
+                      onClick={() => setDetailItem(t)}
+                    >
+                      View
+                    </Button>
+                  </Tooltip>
                   <Button size="small" type="link" onClick={() => { setEditItem(t); setModalOpen(true); }}>
                     Edit
                   </Button>
@@ -140,6 +152,13 @@ export default function TaskList() {
         open={modalOpen}
         editItem={editItem}
         onClose={() => { setModalOpen(false); setEditItem(null); }}
+      />
+
+      <EntityDetailDrawer
+        entity={detailItem}
+        type="task"
+        open={!!detailItem}
+        onClose={() => setDetailItem(null)}
       />
     </div>
   );

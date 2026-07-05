@@ -1,7 +1,8 @@
-import { Spin, Result, Button, Typography } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { Spin, Result, Button, Typography, Breadcrumb, Space } from 'antd';
+import { ArrowLeftOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useRunDetail } from '../hooks/useRunDetail';
+import { useRunReportMarkdown } from '../hooks/useRunReportMarkdown';
 import ReportSummary from '../components/report/ReportSummary';
 import KeyFindings from '../components/report/KeyFindings';
 import FrictionIssues from '../components/report/FrictionIssues';
@@ -17,7 +18,21 @@ export default function ReportPage() {
   const navigate = useNavigate();
 
   const { reportQuery } = useRunDetail(runId!, isDemo || undefined);
+  const { data: markdownReport } = useRunReportMarkdown(runId!, isDemo || undefined);
   const report = reportQuery.data;
+
+  const displayId = runId && runId.length > 12 ? `${runId.slice(0, 12)}…` : runId || '';
+
+  const handleDownloadMarkdown = () => {
+    if (!markdownReport?.markdown) return;
+    const blob = new Blob([markdownReport.markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `report-${runId}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (reportQuery.isLoading) {
     return (
@@ -71,16 +86,39 @@ export default function ReportPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <Button
-          type="text"
-          icon={<ArrowLeftOutlined />}
-          onClick={() => navigate(`/runs/${runId}`)}
-          style={{ borderRadius: 8 }}
-        />
-        <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
-          Report
-        </Title>
+      {/* Breadcrumb */}
+      <Breadcrumb
+        style={{ marginBottom: 16 }}
+        items={[
+          { title: <span style={{ cursor: 'pointer' }} onClick={() => navigate('/')}>Dashboard</span> },
+          { title: <span style={{ cursor: 'pointer' }} onClick={() => navigate(`/runs/${runId}`)}>Run {displayId}</span> },
+          { title: 'Report' },
+        ]}
+      />
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Button
+            type="text"
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate(`/runs/${runId}`)}
+            style={{ borderRadius: 8 }}
+          />
+          <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+            Report
+          </Title>
+        </div>
+        <Space>
+          {markdownReport?.markdown && (
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={handleDownloadMarkdown}
+            >
+              Download Markdown
+            </Button>
+          )}
+        </Space>
       </div>
 
       <ReportSummary report={report} />

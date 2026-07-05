@@ -1,5 +1,6 @@
-import { Tabs, Typography } from 'antd';
+import { Tabs, Typography, Breadcrumb } from 'antd';
 import { UserOutlined, FileTextOutlined, BookOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router';
 import PersonaList from '../components/entities/PersonaList';
 import TaskList from '../components/entities/TaskList';
 import KnowledgeList from '../components/entities/KnowledgeList';
@@ -7,8 +8,19 @@ import KnowledgeList from '../components/entities/KnowledgeList';
 const { Title, Text } = Typography;
 
 export default function EntitiesPage() {
+  const navigate = useNavigate();
+
   return (
     <div>
+      {/* Breadcrumb */}
+      <Breadcrumb
+        style={{ marginBottom: 16 }}
+        items={[
+          { title: <span style={{ cursor: 'pointer' }} onClick={() => navigate('/')}>Dashboard</span> },
+          { title: 'Entities' },
+        ]}
+      />
+
       <div className="page-header" style={{ marginBottom: 24 }}>
         <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
           Entities

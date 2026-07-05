@@ -1,9 +1,10 @@
-import { Button, Space, Card, Typography, Tag, Modal, Avatar } from 'antd';
-import { PlusOutlined, BookOutlined } from '@ant-design/icons';
+import { Button, Space, Card, Typography, Tag, Modal, Avatar, Tooltip } from 'antd';
+import { PlusOutlined, BookOutlined, EyeOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { useKnowledgeItems, useDeleteKnowledgeItem } from '../../hooks/useKnowledge';
 import KnowledgeForm from './forms/KnowledgeForm';
 import type { KnowledgeItem, RetrievalSourceType } from '../../types/knowledge';
+import EntityDetailDrawer from './EntityDetailDrawer';
 
 const { Text } = Typography;
 
@@ -22,6 +23,7 @@ export default function KnowledgeList() {
   const deleteItem = useDeleteKnowledgeItem();
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<KnowledgeItem | null>(null);
+  const [detailItem, setDetailItem] = useState<KnowledgeItem | null>(null);
   const [activeTab, setActiveTab] = useState<RetrievalSourceType | 'all'>('all');
 
   const filtered = (items ?? []).filter((item) =>
@@ -154,6 +156,16 @@ export default function KnowledgeList() {
                     </div>
                   </div>
                   <Space>
+                    <Tooltip title="View Detail">
+                      <Button
+                        size="small"
+                        type="link"
+                        icon={<EyeOutlined />}
+                        onClick={() => setDetailItem(item)}
+                      >
+                        View
+                      </Button>
+                    </Tooltip>
                     <Button size="small" type="link" onClick={() => { setEditItem(item); setModalOpen(true); }}>
                       Edit
                     </Button>
@@ -185,6 +197,13 @@ export default function KnowledgeList() {
         open={modalOpen}
         editItem={editItem}
         onClose={() => { setModalOpen(false); setEditItem(null); }}
+      />
+
+      <EntityDetailDrawer
+        entity={detailItem}
+        type="knowledge"
+        open={!!detailItem}
+        onClose={() => setDetailItem(null)}
       />
     </div>
   );

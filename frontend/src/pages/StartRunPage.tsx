@@ -1,5 +1,5 @@
-import { Card, Form, Select, Input, Switch, Button, Space, message, Typography } from 'antd';
-import { ArrowLeftOutlined, RocketOutlined } from '@ant-design/icons';
+import { Card, Form, Select, Input, Switch, Button, Space, message, Typography, Tag } from 'antd';
+import { ArrowLeftOutlined, RocketOutlined, UserOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router';
 import { usePersonas } from '../hooks/usePersonas';
 import { useTasks } from '../hooks/useTasks';
@@ -34,6 +34,7 @@ export default function StartRunPage() {
 
   return (
     <div>
+      {/* Breadcrumb */}
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
           <Button
@@ -46,6 +47,9 @@ export default function StartRunPage() {
             Start Formal Run
           </Title>
         </div>
+        <Text style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>
+          选择 Persona 和 Task 启动一次正式运行
+        </Text>
       </div>
 
       {personasEmpty || tasksEmpty ? (
@@ -74,6 +78,13 @@ export default function StartRunPage() {
             </span>{' '}
             page.
           </p>
+          <Button
+            type="primary"
+            onClick={() => navigate('/entities')}
+            className="btn-primary-gradient"
+          >
+            Go to Entities
+          </Button>
         </div>
       ) : (
         <Card
@@ -97,7 +108,13 @@ export default function StartRunPage() {
                 loading={!personas}
                 options={(personas || []).map((p) => ({
                   value: p.id,
-                  label: `${p.name} (${p.skill_level})`,
+                  label: (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <UserOutlined style={{ color: 'var(--color-primary)' }} />
+                      <span>{p.name}</span>
+                      <Tag style={{ marginLeft: 4, fontSize: 11 }}>{p.skill_level}</Tag>
+                    </div>
+                  ),
                 }))}
               />
             </Form.Item>
@@ -113,7 +130,15 @@ export default function StartRunPage() {
                 loading={!tasks}
                 options={(tasks || []).map((t) => ({
                   value: t.id,
-                  label: `${t.name} — ${(t.start_url || '').slice(0, 50)}`,
+                  label: (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <FileTextOutlined style={{ color: 'var(--color-success)' }} />
+                      <span>{t.name}</span>
+                      <Tag color={t.risk_level === 'high' ? 'error' : t.risk_level === 'medium' ? 'warning' : 'success'} style={{ marginLeft: 4, fontSize: 11 }}>
+                        {t.risk_level}
+                      </Tag>
+                    </div>
+                  ),
                 }))}
               />
             </Form.Item>

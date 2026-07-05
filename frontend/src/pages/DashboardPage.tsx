@@ -1,5 +1,6 @@
-import { Card, Button, Table, message, Typography } from 'antd';
-import { PlayCircleOutlined, ArrowRightOutlined } from '@ant-design/icons';
+import { Card, Button, Table, message, Typography, Segmented } from 'antd';
+import { PlayCircleOutlined, ArrowRightOutlined, RocketOutlined, ReloadOutlined } from '@ant-design/icons';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useRuns, useStartDemoRun } from '../hooks/useRuns';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -11,6 +12,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const { data: runs, isLoading } = useRuns();
   const startDemo = useStartDemoRun();
+  const [filter, setFilter] = useState<'all' | 'running' | 'succeeded' | 'failed'>('all');
 
   const handleStartDemo = async () => {
     try {
@@ -22,13 +24,14 @@ export default function DashboardPage() {
     }
   };
 
-  const recentRuns = (runs || []).slice(0, 10);
+  const allRuns = runs ?? [];
+  const filteredRuns = filter === 'all' ? allRuns : allRuns.filter(r => r.status === filter);
 
   const stats = {
-    total: runs?.length ?? 0,
-    succeeded: (runs || []).filter(r => r.status === 'succeeded').length,
-    failed: (runs || []).filter(r => r.status === 'failed').length,
-    running: (runs || []).filter(r => r.status === 'running').length,
+    total: allRuns.length ?? 0,
+    succeeded: (allRuns).filter(r => r.status === 'succeeded').length,
+    failed: (allRuns).filter(r => r.status === 'failed').length,
+    running: (allRuns).filter(r => r.status === 'running').length,
   };
 
   const columns = [
@@ -68,6 +71,21 @@ export default function DashboardPage() {
         <Text style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>
           {dayjs(v).format('YYYY-MM-DD HH:mm')}
         </Text>
+      ),
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 120,
+      render: (_: any, record: any) => (
+        <Button
+          type="link"
+          size="small"
+          onClick={() => navigate(`/runs/${record.run_id}`)}
+          style={{ fontWeight: 500 }}
+        >
+          View Detail
+        </Button>
       ),
     },
   ];
@@ -137,24 +155,56 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Quick Actions */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 28, flexWrap: 'wrap' }}>
+        <Button
+          type="primary"
+          icon={<RocketOutlined />}
+          onClick={() => navigate('/runs/new')}
+          className="btn-primary-gradient"
+          size="large"
+        >
+          Start Formal Run
+        </Button>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={() => window.location.reload()}
+          size="large"
+        >
+          Refresh
+        </Button>
+      </div>
+
       {/* Recent Runs */}
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
           <Title level={4} style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)' }}>
             Recent Runs
           </Title>
-          {recentRuns.length > 0 && (
-            <Button
-              type="link"
-              onClick={() => navigate('/entities')}
-              style={{ fontWeight: 500, fontSize: 13 }}
-            >
-              View All <ArrowRightOutlined />
-            </Button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Segmented
+              value={filter}
+              onChange={(v) => setFilter(v as any)}
+              options={[
+                { label: 'All', value: 'all' },
+                { label: 'Running', value: 'running' },
+                { label: 'Succeeded', value: 'succeeded' },
+                { label: 'Failed', value: 'failed' },
+              ]}
+            />
+            {allRuns.length > 0 && (
+              <Button
+                type="link"
+                onClick={() => navigate('/entities')}
+                style={{ fontWeight: 500, fontSize: 13 }}
+              >
+                View All <ArrowRightOutlined />
+              </Button>
+            )}
+          </div>
         </div>
 
-        {recentRuns.length === 0 && !isLoading ? (
+        {allRuns.length === 0 && !isLoading ? (
           <div className="empty-state" style={{ padding: 48 }}>
             <div className="empty-icon" style={{ fontSize: 40, marginBottom: 12 }}>🚀</div>
             <h4 style={{ margin: '0 0 8px 0', fontSize: 15, fontWeight: 600, color: 'var(--color-text-primary)' }}>
@@ -167,11 +217,11 @@ export default function DashboardPage() {
         ) : (
           <div className="demo-table">
             <Table
-              dataSource={recentRuns}
+              dataSource={filteredRuns}
               columns={columns}
               rowKey="run_id"
               loading={isLoading}
-              pagination={false}
+              pagination={{ pageSize: 10, showSizeChanger: false }}
               size="middle"
               showSorterTooltip={false}
             />
