@@ -236,10 +236,11 @@
 <!-- ========== wait ========== -->
 <section id="s-wait">
   <h2>wait — 等待元素/条件</h2>
-  <button class="btn btn-primary" id="btn-wait-start" data-testid="btn-wait-start">开始异步任务（3秒后完成）</button>
+  <button class="btn btn-primary" id="btn-wait-start" data-testid="btn-wait-start">开始异步任务（30秒后完成）</button>
   <div class="progress-bar" style="margin-top:12px"><div class="fill" id="wait-progress"></div></div>
+  <div class="msg-box info hidden" id="loading-card" data-testid="loading-card">正在注册，请稍候…</div>
   <div class="msg-box" id="wait-msg">异步任务完成！</div>
-  <p style="margin-top:8px;font-size:13px;color:#9ca3af">提示：wait 动作可等待 #wait-msg 变为可见，或等待 #btn-wait-done 出现</p>
+  <p style="margin-top:8px;font-size:13px;color:#9ca3af">提示：wait 动作可等待 #loading-card 消失，并在 30 秒后看到 #wait-msg 与 success-card 出现</p>
 </section>
 
 <!-- ========== upload ========== -->
@@ -406,17 +407,26 @@ document.getElementById('press-input').addEventListener('keydown', (e) => {
 document.getElementById('btn-wait-start').addEventListener('click', () => {
   const bar = document.getElementById('wait-progress');
   const msg = document.getElementById('wait-msg');
+  const loading = document.getElementById('loading-card');
+  const totalDurationMs = 30000;
+  const tickMs = 3000;
+  const progressStep = 100 / (totalDurationMs / tickMs);
   bar.style.width = '0%';
   msg.className = 'msg-box';
+  loading.className = 'msg-box info';
   let p = 0;
   const iv = setInterval(() => {
-    p += 10;
-    bar.style.width = p + '%';
+    p += progressStep;
+    bar.style.width = Math.min(p, 100) + '%';
     if (p >= 100) {
       clearInterval(iv);
-      msg.className = 'msg-box success';
     }
-  }, 300);
+  }, tickMs);
+  setTimeout(() => {
+    loading.className = 'msg-box info hidden';
+    msg.className = 'msg-box success';
+    document.getElementById('success-card').classList.remove('hidden');
+  }, totalDurationMs);
 });
 
 // ===== upload =====

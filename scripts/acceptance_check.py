@@ -35,7 +35,9 @@ sys.path.insert(0, str(project_root))
 from fastapi.testclient import TestClient
 
 from backend.analysis.compare_report import build_compare_report
+from backend.analysis.report_builder import build_run_report_without_llm
 from backend.execution.action_guard import is_destructive_action
+from backend.fixtures.friction_experiments import FrictionExperiment, get_friction_experiments
 from backend.fixtures.mvp_samples import get_mvp_personas, get_mvp_tasks
 from backend.main import app
 from backend.retrieval import build_retrieval_context, retrieve_failure_cases
@@ -660,6 +662,101 @@ def check_batch_compare(report: AcceptanceReport) -> None:
     record(report, "compare 不存在 run 返回 404", not_found_resp.status_code == 404, f"code={not_found_resp.status_code}")
 
 
+# ============================ S-010 摩擦实验验收 ============================ #
+
+
+def _sample_persona_by_name(name: str) -> Persona:
+    for persona in get_mvp_personas():
+        if persona.name == name:
+            return Persona(**persona.model_dump())
+    raise ValueError(f"Persona sample not found: {name}")
+
+
+def _sample_task_by_name(name: str) -> Task:
+    for task in get_mvp_tasks():
+        if task.name == name:
+            return Task(**task.model_dump())
+    raise ValueError(f"Task sample not found: {name}")
+
+
+def _store_friction_experiment_run(experiment: FrictionExperiment, task: Task | None = None) -> str:
+    store = get_run_store()
+    record = RunRecord(
+        run_id=f"acceptance-friction-{experiment.experiment_id}",
+        request=RunRequest(run_name=experiment.experiment_id),
+        persona=_sample_persona_by_name(experiment.persona_name),
+        task=task or _sample_task_by_name(experiment.task_name),
+    )
+    store.create_run(record)
+    steps = experiment.build_steps()
+    for step in steps:
+        store.add_step(record.run_id, step)
+    report = build_run_report_without_llm(record, steps)
+    store.complete_run(record.run_id, report)
+    return record.run_id
+
+
+def check_friction_experiments(report: AcceptanceReport) -> None:
+    """验收路径:多 persona 摩擦实验集(S-010)。"""
+
+    print("\n[路径 7] 多 persona 摩擦实验集")
+    experiments = get_friction_experiments()
+    record(report, "摩擦实验 fixture 数量=4", len(experiments) == 4, f"len={len(experiments)}")
+
+    task_cache = {task.name: _sample_task_by_name(task.name) for task in get_mvp_tasks()}
+    run_ids_by_experiment: dict[str, str] = {}
+    for experiment in experiments:
+        run_id = _store_friction_experiment_run(experiment, task=task_cache[experiment.task_name])
+        run_ids_by_experiment[experiment.experiment_id] = run_id
+        stored_report = get_run_store().get_report(run_id)
+        expected_signals = set(experiment.expected_friction_signals)
+        actual_signals = set(stored_report.friction_signals if stored_report else [])
+        record(
+            report,
+            f"实验 {experiment.experiment_id} 报告已生成",
+            stored_report is not None,
+        )
+        record(
+            report,
+            f"实验 {experiment.experiment_id} conclusion={experiment.expected_conclusion}",
+            stored_report is not None and stored_report.conclusion == experiment.expected_conclusion,
+            f"conclusion={stored_report.conclusion if stored_report else None}",
+        )
+        record(
+            report,
+            f"实验 {experiment.experiment_id} 命中预期摩擦信号",
+            expected_signals.issubset(actual_signals),
+            f"expected={sorted(expected_signals)}, actual={sorted(actual_signals)}",
+        )
+
+    checkout_compare = build_compare_report(
+        [run_ids_by_experiment["E-001"], run_ids_by_experiment["E-002"]],
+        get_run_store(),
+    )
+    checkout_items = {item.persona.name: item for item in checkout_compare.items}
+    record(report, "结算实验对比 run_count=2", checkout_compare.run_count == 2)
+    record(report, "结算实验对比 success_count=1", checkout_compare.success_count == 1)
+    record(
+        report,
+        "结算实验中新手摩擦信号数高于专家",
+        checkout_items["新手用户"].friction_signal_count > checkout_items["专家用户"].friction_signal_count,
+        f"newbie={checkout_items['新手用户'].friction_signal_count}, expert={checkout_items['专家用户'].friction_signal_count}",
+    )
+
+    coupon_compare = build_compare_report(
+        [run_ids_by_experiment["E-003"], run_ids_by_experiment["E-004"]],
+        get_run_store(),
+    )
+    coupon_items = {item.persona.name: item for item in coupon_compare.items}
+    record(report, "优惠券实验对比 run_count=2", coupon_compare.run_count == 2)
+    record(report, "优惠券实验对比 success_count=1", coupon_compare.success_count == 1)
+    record(
+        report,
+        "优惠券实验中老年用户成功而新手用户失败",
+        coupon_items["老年用户"].success is True and coupon_items["新手用户"].success is False,
+    )
+
+
 # ============================ 验收报告渲染 ============================ #
 
 
@@ -724,6 +821,7 @@ def run_acceptance() -> AcceptanceReport:
         check_knowledge_retrieval(report)
         check_test_site(report)
         check_batch_compare(report)
+        check_friction_experiments(report)
     except Exception as exc:  # noqa: BLE001 - 验收脚本需捕获中断并记录
         traceback.print_exc()
         record(report, "验收流程未中断", False, f"{type(exc).__name__}: {exc}")

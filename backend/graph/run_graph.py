@@ -26,6 +26,7 @@ from backend.execution.playwright_adapter import TERMINAL_ACTIONS, close_browser
 from backend.graph.run_state import RunState
 from backend.graph.wait_observer import WaitObservationDecision, WaitObservationOptions, observe_until_ready
 from backend.prompt.graph import (
+    build_persona_behavioral_instructions,
     decide,
     decide_input,
     format_retry_input,
@@ -257,6 +258,7 @@ async def decide_next_action(state: RunState) -> dict:
         persona=persona.model_dump_json(indent=2),
         task=task.model_dump_json(indent=2),
         action_definitions=render_action_definitions(),
+        persona_behavioral_instructions=build_persona_behavioral_instructions(persona),
     )
     user_messages = decide_input_prompt.format_messages(
         current_page_state=page_state.model_dump_json(indent=2),
