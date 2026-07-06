@@ -54,7 +54,10 @@ from backend.stores import get_entity_store, get_run_store
 logger = logging.getLogger(__name__)
 MODEL_API_RETRY_LIMIT = 5
 MODEL_FORMAT_RETRY_LIMIT = 3
-run_store = get_run_store()
+
+
+def _store():
+    return get_run_store()
 
 
 class ModelInvocationError(RuntimeError):
@@ -593,7 +596,7 @@ def log_current_step(state: RunState) -> dict:
         retrieval_context=state.get("retrieval_context") or [],
     )
     updated_steps = [*step_logs, step_log]
-    run_store.add_step(state["run_id"], step_log)
+    _store().add_step(state["run_id"], step_log)
     return {"step_logs": updated_steps, "current_step_index": step_index}
 
 # 路由节点路由函数, 条件边
@@ -662,7 +665,7 @@ async def finalize_report(state: RunState) -> dict:
 
     try:
         report = await build_run_report_async(record, state.get("step_logs", []))
-        run_store.complete_run(state["run_id"], report)
+        _store().complete_run(state["run_id"], report)
         return {"report": report}
     finally:
         await close_browser_session(state.get("session"))
@@ -755,11 +758,11 @@ async def run_workflow(
         report_summary = f"模型调用错误: {error_message}" if is_model_error else f"运行异常中断: {error_message}"
         finding = f"模型调用错误: {error_message}" if is_model_error else f"异常: {error_message}"
         logger.exception("run workflow failed, run_id=%s", run_id)
-        run_store.fail_run(run_id, error_message, error_type=error_type)
+        _store().fail_run(run_id, error_message, error_type=error_type)
 
-        record = run_store.get_record(run_id)
-        if record is not None and run_store.get_report(run_id) is None:
-            report = build_run_report_without_llm(record, run_store.get_steps(run_id) or [])
+        record = _store().get_record(run_id)
+        if record is not None and _store().get_report(run_id) is None:
+            report = build_run_report_without_llm(record, _store().get_steps(run_id) or [])
             report = report.model_copy(
                 update={
                     "status": "failed",
@@ -774,7 +777,7 @@ async def run_workflow(
                     ],
                 }
             )
-            run_store.complete_run(run_id, report)
+            _store().complete_run(run_id, report)
         raise
     finally:
         session_box = initial_state.get("session_box") or {}

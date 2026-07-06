@@ -62,6 +62,19 @@ def _track_background_task(run_id: str, task: asyncio.Task) -> None:
     task.add_done_callback(handle_done)
 
 
+async def shutdown_background_tasks() -> None:
+    """取消并等待全部后台 formal run task 结束。"""
+
+    tasks = list(_background_tasks)
+    if not tasks:
+        return
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    await asyncio.sleep(0)
+
+
 def _create_and_launch_run(
     persona: Persona,
     task: Task,

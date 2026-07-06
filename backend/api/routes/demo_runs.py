@@ -20,7 +20,10 @@ from backend.stores import get_run_store
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/runs/demo", tags=["demo-runs"])
 _background_tasks: set[asyncio.Task] = set()
-run_store = get_run_store()
+
+
+def _store():
+    return get_run_store()
 
 
 def _track_background_task(run_id: str, task: asyncio.Task) -> None:
@@ -29,11 +32,11 @@ def _track_background_task(run_id: str, task: asyncio.Task) -> None:
 
     def handle_done(done_task: asyncio.Task) -> None:
         _background_tasks.discard(done_task)
-        status = run_store.get_status(run_id)
+        status = _store().get_status(run_id)
         if status is not None and status.status in {"succeeded", "failed"}:
             return
         if done_task.cancelled():
-            run_store.fail_run(run_id, "后台任务被取消。")
+            _store().fail_run(run_id, "后台任务被取消。")
             return
         exc = done_task.exception()
         if exc is not None:
@@ -42,9 +45,22 @@ def _track_background_task(run_id: str, task: asyncio.Task) -> None:
                 run_id,
                 exc_info=(type(exc), exc, exc.__traceback__),
             )
-            run_store.fail_run(run_id, f"{type(exc).__name__}: {exc}")
+            _store().fail_run(run_id, f"{type(exc).__name__}: {exc}")
 
     task.add_done_callback(handle_done)
+
+
+async def shutdown_background_tasks() -> None:
+    """取消并等待全部后台 demo run task 结束。"""
+
+    tasks = list(_background_tasks)
+    if not tasks:
+        return
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    await asyncio.sleep(0)
 
 
 @router.get("/health", response_model=ApiResponse)
@@ -66,7 +82,7 @@ async def start_demo_run(request: Request, payload: RunRequest) -> ApiResponse:
         request=payload,
         app_base_url=app_base_url,
     )
-    run_store.create_run(placeholder_record)
+    _store().create_run(placeholder_record)
     task = asyncio.create_task(
         run_demo_workflow(
             run_id=run_id,
@@ -83,7 +99,7 @@ async def start_demo_run(request: Request, payload: RunRequest) -> ApiResponse:
 async def get_demo_run_status(run_id: str) -> ApiResponse:
     """返回 demo run 当前状态。"""
 
-    status = run_store.get_status(run_id)
+    status = _store().get_status(run_id)
     if status is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return ApiResponse(data=status)
@@ -93,7 +109,7 @@ async def get_demo_run_status(run_id: str) -> ApiResponse:
 async def get_demo_run_steps(run_id: str) -> ApiResponse:
     """返回 demo run 全部步骤日志。"""
 
-    steps = run_store.get_steps(run_id)
+    steps = _store().get_steps(run_id)
     if steps is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return ApiResponse(data=steps)
@@ -103,9 +119,9 @@ async def get_demo_run_steps(run_id: str) -> ApiResponse:
 async def get_demo_run_report(run_id: str) -> ApiResponse:
     """返回 demo run 最终报告。"""
 
-    report = run_store.get_report(run_id)
+    report = _store().get_report(run_id)
     if report is None:
-        record = run_store.get_record(run_id)
+        record = _store().get_record(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Run not found")
         raise HTTPException(status_code=409, detail="Run report is not ready")
@@ -116,9 +132,9 @@ async def get_demo_run_report(run_id: str) -> ApiResponse:
 async def get_demo_run_report_markdown(run_id: str) -> ApiResponse:
     """返回 demo run 最终报告的 Markdown 渲染。"""
 
-    report = run_store.get_report(run_id)
+    report = _store().get_report(run_id)
     if report is None:
-        record = run_store.get_record(run_id)
+        record = _store().get_record(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Run not found")
         raise HTTPException(status_code=409, detail="Run report is not ready")

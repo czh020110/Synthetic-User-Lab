@@ -14,10 +14,13 @@ from backend.graph.run_graph import create_run_agents, build_run_graph, run_work
 from backend.graph.run_state import RunState
 from backend.retrieval import build_retrieval_context
 from backend.schemas.run_schemas import Persona, RunRecord, RunRequest, Task
-from backend.stores import get_run_store, get_entity_store
+from backend.stores import get_entity_store, get_run_store
 
 logger = logging.getLogger(__name__)
-run_store = get_run_store()
+
+
+def _store():
+    return get_run_store()
 
 
 def build_demo_persona() -> Persona:
@@ -85,7 +88,7 @@ async def load_demo_context(state: RunState) -> dict:
     record = state.get("record")
     if record is None:
         record = RunRecord(run_id=state["run_id"], request=state["request"], persona=persona, task=task)
-        run_store.create_run(record)
+        _store().create_run(record)
     else:
         record.persona = persona
         record.task = task
@@ -93,7 +96,7 @@ async def load_demo_context(state: RunState) -> dict:
     retrieval_context = build_retrieval_context(persona, task, entity_store=get_entity_store())
 
     decide_agent, validate_agent, wait_agent = create_run_agents(persona, task)
-    run_store.mark_running(record.run_id)
+    _store().mark_running(record.run_id)
     return {
         "persona": persona,
         "task": task,

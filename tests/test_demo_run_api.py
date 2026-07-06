@@ -24,14 +24,17 @@ from backend.schemas.run_schemas import (
 )
 from backend.stores import get_run_store
 
-run_store = get_run_store()
+
+def _store():
+    return get_run_store()
+
 
 client = TestClient(app)
 api_prefix = get_settings().api_prefix
 
 
 def setup_function() -> None:
-    run_store.clear()
+    _store().clear()
     demo_runs._background_tasks.clear()
 
 
@@ -63,14 +66,14 @@ def test_start_demo_run_returns_run_id(monkeypatch) -> None:
             await asyncio.sleep(0)
 
     asyncio.run(wait_until_stopped())
-    status = run_store.get_status(payload["run_id"])
+    status = _store().get_status(payload["run_id"])
     assert status is not None
     assert status.status in {"queued", "running", "succeeded", "failed"}
 
 
 def test_background_task_failure_marks_run_failed() -> None:
     run_id = "run-background-failed"
-    run_store.create_run(
+    _store().create_run(
         RunRecord(
             run_id=run_id,
             request=RunRequest(run_name="demo"),
@@ -90,10 +93,38 @@ def test_background_task_failure_marks_run_failed() -> None:
 
     asyncio.run(run_and_wait_done_callback())
 
-    status = run_store.get_status(run_id)
+    status = _store().get_status(run_id)
     assert status is not None
     assert status.status == "failed"
     assert status.error_message == "RuntimeError: boom"
+    assert not demo_runs._background_tasks
+
+
+def test_shutdown_background_tasks_cancels_pending_task() -> None:
+    run_id = "run-background-cancelled"
+    _store().create_run(
+        RunRecord(
+            run_id=run_id,
+            request=RunRequest(run_name="demo"),
+            persona=Persona(),
+            task=Task(start_url="http://testserver/demo/index.html"),
+        )
+    )
+
+    async def hang() -> None:
+        await asyncio.sleep(30)
+
+    async def cancel_and_wait() -> None:
+        task = asyncio.create_task(hang())
+        demo_runs._track_background_task(run_id, task)
+        await demo_runs.shutdown_background_tasks()
+
+    asyncio.run(cancel_and_wait())
+
+    status = _store().get_status(run_id)
+    assert status is not None
+    assert status.status == "failed"
+    assert status.error_message == "后台任务被取消。"
     assert not demo_runs._background_tasks
 
 
@@ -181,10 +212,10 @@ def test_steps_and_report_expose_recovery_branch_snapshots() -> None:
         retrieval_context=shared_retrieval_context,
     )
 
-    run_store.create_run(record)
-    run_store.add_step(run_id, wait_step)
-    run_store.add_step(run_id, recovery_step)
-    run_store.complete_run(run_id, build_run_report(record, [wait_step, recovery_step]))
+    _store().create_run(record)
+    _store().add_step(run_id, wait_step)
+    _store().add_step(run_id, recovery_step)
+    _store().complete_run(run_id, build_run_report(record, [wait_step, recovery_step]))
 
     steps_response = client.get(f"{api_prefix}/runs/demo/{run_id}/steps")
     report_response = client.get(f"{api_prefix}/runs/demo/{run_id}/report")

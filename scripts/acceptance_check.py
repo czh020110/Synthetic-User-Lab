@@ -59,7 +59,7 @@ from backend.schemas.run_schemas import (
     Task,
     ValidationResult,
 )
-from backend.stores import get_entity_store, get_run_store
+from backend.stores import _reset_entity_store, _reset_run_store, get_entity_store, get_run_store
 
 client = TestClient(app)
 REPORT_DIR = project_root / "acceptance_reports"
@@ -241,10 +241,12 @@ async def _scripted_formal_workflow(run_id: str, **_kwargs) -> None:
 
 
 def _reset_stores() -> None:
-    """清空 store，保证验收可重复运行。"""
+    """清空并重置 store，保证验收可重复运行。"""
 
     get_entity_store().clear()
     get_run_store().clear()
+    _reset_run_store()
+    _reset_entity_store()
 
 
 def _seed_mvp_samples() -> tuple[str, str]:

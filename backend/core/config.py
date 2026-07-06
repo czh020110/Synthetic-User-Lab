@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -29,7 +30,7 @@ class Settings(BaseModel):
     demo_site_dir: Path
     test_site_dir: Path
     screenshot_dir: Path
-    database_url: Path
+    database_url: str
     cors_origins: list[str]
     custom_system_prompt: str
     model_provider: str
@@ -37,6 +38,19 @@ class Settings(BaseModel):
     api_key: str
     model_name: str
     fast_model_name: str
+
+
+DatabaseBackend = Literal["memory", "sqlite", "postgres"]
+
+
+def resolve_database_backend(database_url: str) -> DatabaseBackend:
+    """识别当前数据库后端类型。"""
+
+    if database_url == ":memory:":
+        return "memory"
+    if database_url.startswith(("postgresql://", "postgres://")):
+        return "postgres"
+    return "sqlite"
 
 
 @lru_cache(maxsize=1)
@@ -59,7 +73,7 @@ def get_settings() -> Settings:
         demo_site_dir=BASE_DIR / "backend" / "fixtures" / "demo_site",
         test_site_dir=BASE_DIR / "backend" / "fixtures" / "test_site",
         screenshot_dir=BASE_DIR / "screenshots",
-        database_url=Path(os.getenv("SYNTHETIC_USER_LAB_DATABASE_URL", str(BASE_DIR / "data" / "synthetic_user_lab.db"))),
+        database_url=os.getenv("SYNTHETIC_USER_LAB_DATABASE_URL", str(BASE_DIR / "data" / "synthetic_user_lab.db")),
         cors_origins=[s.strip() for s in os.getenv("SYNTHETIC_USER_LAB_CORS_ORIGINS", "http://localhost:5173").split(",") if s.strip()],
         custom_system_prompt=os.getenv("CUSTOM_SYSTEM_PROMPT", ""),
         model_provider=model_router.model_provider,
@@ -71,6 +85,6 @@ def get_settings() -> Settings:
     settings.demo_site_dir.mkdir(parents=True, exist_ok=True)
     settings.test_site_dir.mkdir(parents=True, exist_ok=True)
     settings.screenshot_dir.mkdir(parents=True, exist_ok=True)
-    if str(settings.database_url) != ":memory:":
-        settings.database_url.parent.mkdir(parents=True, exist_ok=True)
+    if resolve_database_backend(settings.database_url) == "sqlite":
+        Path(settings.database_url).parent.mkdir(parents=True, exist_ok=True)
     return settings

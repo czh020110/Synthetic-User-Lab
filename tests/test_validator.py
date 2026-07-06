@@ -31,7 +31,10 @@ from backend.schemas.run_schemas import (
 from backend.graph.wait_observer import WaitObservationResult, WaitObservationTrace
 from backend.stores import get_run_store
 
-run_store = get_run_store()
+
+def _store():
+    return get_run_store()
+
 
 START_URL = "http://127.0.0.1:8000/demo/index.html"
 OTHER_URL = "http://127.0.0.1:8000/demo/other.html"
@@ -892,9 +895,9 @@ def test_prepare_recovery_action_builds_controlled_navigate() -> None:
 
 
 def test_log_current_step_includes_wait_observation_details() -> None:
-    run_store.clear()
+    _store().clear()
     run_id = "run-wait-log"
-    run_store.create_run(RunRecord(run_id=run_id, request=RunRequest(), persona=Persona(), task=Task(start_url=START_URL)))
+    _store().create_run(RunRecord(run_id=run_id, request=RunRequest(), persona=Persona(), task=Task(start_url=START_URL)))
     state = cast(Any, {
         "run_id": run_id,
         "step_before_page_state": make_page_state(text="提交前页面"),
@@ -1066,10 +1069,10 @@ class FakeModelErrorGraph:
 
 
 def test_run_workflow_returns_raw_model_error_in_status_and_report(monkeypatch) -> None:
-    run_store.clear()
+    _store().clear()
     monkeypatch.setattr(run_graph, "build_run_graph", lambda _load_context_node: FakeModelErrorGraph())
     run_id = "run-model-error"
-    run_store.create_run(
+    _store().create_run(
         RunRecord(
             run_id=run_id,
             request=RunRequest(),
@@ -1089,8 +1092,8 @@ def test_run_workflow_returns_raw_model_error_in_status_and_report(monkeypatch) 
             )
         )
 
-    status = run_store.get_status(run_id)
-    report = run_store.get_report(run_id)
+    status = _store().get_status(run_id)
+    report = _store().get_report(run_id)
 
     assert status is not None
     assert status.status == "failed"

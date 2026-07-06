@@ -4,6 +4,7 @@ from __future__ import annotations
 # 模块功能: 提供 get_run_store() 和 get_entity_store() 工厂函数
 # 模块接口说明: get_run_store() 返回 RunStore 实例，get_entity_store() 返回 EntityStore 实例
 
+from backend.core.config import resolve_database_backend
 from backend.stores.entity_store_protocol import EntityStore
 from backend.stores.run_store_protocol import RunStore
 
@@ -13,29 +14,52 @@ _run_store: RunStore | None = None
 _entity_store: EntityStore | None = None
 
 
-def get_run_store() -> RunStore:
-    """按配置返回全局 run_store 实例。
+def _create_run_store(database_url: str) -> RunStore:
+    backend = resolve_database_backend(database_url)
+    if backend == "memory":
+        from backend.stores.in_memory_run_store import InMemoryRunStore
 
-    - 如果 SYNTHETIC_USER_LAB_DATABASE_URL 为 ":memory:"，返回 InMemoryRunStore
-    - 否则返回 SqliteRunStore 并初始化数据库
-    """
+        return InMemoryRunStore()
+    if backend == "postgres":
+        from backend.stores.postgres_run_store import PostgresRunStore
+
+        store = PostgresRunStore(database_url)
+        store.initialize()
+        return store
+    from backend.stores.sqlite_run_store import SqliteRunStore
+
+    store = SqliteRunStore(database_url)
+    store.initialize()
+    return store
+
+
+def _create_entity_store(database_url: str) -> EntityStore:
+    backend = resolve_database_backend(database_url)
+    if backend == "memory":
+        from backend.stores.in_memory_entity_store import InMemoryEntityStore
+
+        return InMemoryEntityStore()
+    if backend == "postgres":
+        from backend.stores.postgres_entity_store import PostgresEntityStore
+
+        store = PostgresEntityStore(database_url)
+        store.initialize()
+        return store
+    from backend.stores.sqlite_entity_store import SqliteEntityStore
+
+    store = SqliteEntityStore(database_url)
+    store.initialize()
+    return store
+
+
+def get_run_store() -> RunStore:
+    """按配置返回全局 run_store 实例。"""
 
     global _run_store
     if _run_store is None:
         from backend.core.config import get_settings
 
-        settings = get_settings()
-        db_path = str(settings.database_url)
-        if db_path == ":memory:":
-            from backend.stores.in_memory_run_store import InMemoryRunStore
-
-            _run_store = InMemoryRunStore()
-        else:
-            from backend.stores.sqlite_run_store import SqliteRunStore
-
-            store = SqliteRunStore(db_path)
-            store.initialize()
-            _run_store = store
+        _run_store = _create_run_store(get_settings().database_url)
     return _run_store
 
 
@@ -49,28 +73,13 @@ def _reset_run_store() -> None:
 
 
 def get_entity_store() -> EntityStore:
-    """按配置返回全局 entity_store 实例。
-
-    - 如果 SYNTHETIC_USER_LAB_DATABASE_URL 为 ":memory:"，返回 InMemoryEntityStore
-    - 否则返回 SqliteEntityStore 并初始化数据库
-    """
+    """按配置返回全局 entity_store 实例。"""
 
     global _entity_store
     if _entity_store is None:
         from backend.core.config import get_settings
 
-        settings = get_settings()
-        db_path = str(settings.database_url)
-        if db_path == ":memory:":
-            from backend.stores.in_memory_entity_store import InMemoryEntityStore
-
-            _entity_store = InMemoryEntityStore()
-        else:
-            from backend.stores.sqlite_entity_store import SqliteEntityStore
-
-            store = SqliteEntityStore(db_path)
-            store.initialize()
-            _entity_store = store
+        _entity_store = _create_entity_store(get_settings().database_url)
     return _entity_store
 
 
