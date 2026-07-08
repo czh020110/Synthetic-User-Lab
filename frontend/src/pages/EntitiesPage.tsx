@@ -14,7 +14,6 @@ export default function EntitiesPage() {
 
   return (
     <div>
-      {/* Breadcrumb */}
       <Breadcrumb
         style={{ marginBottom: 16 }}
         items={[
@@ -23,11 +22,11 @@ export default function EntitiesPage() {
         ]}
       />
 
-      <div className="page-header" style={{ marginBottom: 24 }}>
-        <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+      <div className="page-header">
+        <Title level={1} className="page-title">
           Entities
         </Title>
-        <Text style={{ fontSize: 14, color: 'var(--color-text-muted)', marginTop: 4, display: 'block' }}>
+        <Text className="page-subtitle">
           管理 Personas、Tasks 和 Knowledge Items
         </Text>
       </div>
@@ -66,19 +65,18 @@ export default function EntitiesPage() {
         tabBarExtraContent={
           <Input
             placeholder="Search entities..."
-            prefix={<SearchOutlined style={{ color: 'var(--color-text-muted)' }} />}
+            prefix={<SearchOutlined style={{ color: 'var(--geist-foreground-tertiary)' }} />}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ width: 240, borderRadius: 8 }}
+            style={{ width: 240 }}
             allowClear
           />
         }
         style={{
-          background: 'var(--color-card)',
-          borderRadius: 12,
-          border: '1px solid var(--color-border)',
-          padding: '20px 24px 24px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
+          background: 'var(--geist-card-bg)',
+          borderRadius: 8,
+          border: '1px solid var(--geist-border)',
+          padding: '16px 24px 24px',
         }}
       />
     </div>

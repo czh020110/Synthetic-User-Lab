@@ -47,15 +47,13 @@ export default function KnowledgeDetailPage() {
 
   return (
     <div>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <Button
           type="text"
           icon={<ArrowLeftOutlined />}
           onClick={() => navigate('/entities')}
-          style={{ borderRadius: 8 }}
         />
-        <Title level={2} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+        <Title level={2} className="page-title">
           {item.title}
         </Title>
         <Tag color={isProductKnowledge ? 'blue' : 'orange'}>
@@ -64,11 +62,10 @@ export default function KnowledgeDetailPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
-        {/* Left Column - Main Content */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
+          <Card className="demo-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-              <Text style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              <Text style={{ fontSize: 16, fontWeight: 600, color: 'var(--geist-foreground)' }}>
                 Knowledge Details
               </Text>
               <Space>
@@ -105,17 +102,16 @@ export default function KnowledgeDetailPage() {
               </Descriptions.Item>
             </Descriptions>
             <Divider style={{ margin: '16px 0' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--color-text-muted)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--geist-foreground-tertiary)' }}>
               <span>Created: {dayjs(item.created_at).format('YYYY-MM-DD HH:mm')}</span>
               <span>Updated: {dayjs(item.updated_at).format('YYYY-MM-DD HH:mm')}</span>
             </div>
           </Card>
         </div>
 
-        {/* Right Column - Actions */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
-            <Text style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)', display: 'block', marginBottom: 16 }}>
+          <Card className="demo-card">
+            <Text style={{ fontSize: 16, fontWeight: 600, color: 'var(--geist-foreground)', display: 'block', marginBottom: 16 }}>
               Quick Actions
             </Text>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -136,20 +132,20 @@ export default function KnowledgeDetailPage() {
             </div>
           </Card>
 
-          <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
-            <Text style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)', display: 'block', marginBottom: 16 }}>
+          <Card className="demo-card">
+            <Text style={{ fontSize: 16, fontWeight: 600, color: 'var(--geist-foreground)', display: 'block', marginBottom: 16 }}>
               Type Information
             </Text>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
-                <Text style={{ fontSize: 13, color: 'var(--color-text-muted)', display: 'block', marginBottom: 4 }}>Type</Text>
-                <Text style={{ fontSize: 18, fontWeight: 600 }}>
+                <Text style={{ fontSize: 12, color: 'var(--geist-foreground-tertiary)', display: 'block', marginBottom: 2 }}>Type</Text>
+                <Text style={{ fontSize: 16, fontWeight: 600 }}>
                   {isProductKnowledge ? '📘 Product Knowledge' : '⚠️ Failure Case'}
                 </Text>
               </div>
               <div>
-                <Text style={{ fontSize: 13, color: 'var(--color-text-muted)', display: 'block', marginBottom: 4 }}>Keywords</Text>
-                <Text style={{ fontSize: 18, fontWeight: 600 }}>{item.keywords?.length || 0}</Text>
+                <Text style={{ fontSize: 12, color: 'var(--geist-foreground-tertiary)', display: 'block', marginBottom: 2 }}>Keywords</Text>
+                <Text style={{ fontSize: 16, fontWeight: 600 }}>{item.keywords?.length || 0}</Text>
               </div>
             </div>
           </Card>

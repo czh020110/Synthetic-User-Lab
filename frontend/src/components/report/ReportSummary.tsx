@@ -10,19 +10,19 @@ export default function ReportSummary({ report }: { report: RunReport }) {
     <div>
       <div style={{ marginBottom: 24 }}>
         <Space size="middle" align="center">
-          <Title level={2} style={{ margin: 0 }}>Report</Title>
+          <Title level={2} style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Report</Title>
           <StatusBadge status={report.status} />
           <ConclusionBadge conclusion={report.conclusion} />
         </Space>
       </div>
 
-      <Card style={{ marginBottom: 16 }}>
-        <Paragraph style={{ fontSize: 15, lineHeight: 1.8 }}>
+      <Card className="demo-card" style={{ marginBottom: 12 }}>
+        <Paragraph style={{ fontSize: 14, lineHeight: 1.7 }}>
           {report.summary}
         </Paragraph>
       </Card>
 
-      <Card style={{ marginBottom: 24 }}>
+      <Card className="demo-card" style={{ marginBottom: 24 }}>
         <Descriptions bordered size="small" column={3}>
           <Descriptions.Item label="Persona">{report.persona?.name || '—'}</Descriptions.Item>
           <Descriptions.Item label="Skill Level">{report.persona?.skill_level || '—'}</Descriptions.Item>
@@ -33,18 +33,17 @@ export default function ReportSummary({ report }: { report: RunReport }) {
         </Descriptions>
 
         {report.error_message && (
-          <Card
-            size="small"
-            style={{
-              background: '#fff2f0',
-              border: '1px solid #ffccc7',
-              marginTop: 16,
-            }}
-          >
-            <Text type="danger" style={{ fontWeight: 500 }}>
+          <div style={{
+            marginTop: 16,
+            padding: '12px 16px',
+            background: 'var(--geist-overlay)',
+            borderRadius: 5,
+            border: '1px solid var(--geist-border)',
+          }}>
+            <Text type="danger" style={{ fontWeight: 500, fontSize: 13 }}>
               {report.error_type}: {report.error_message}
             </Text>
-          </Card>
+          </div>
         )}
       </Card>
     </div>

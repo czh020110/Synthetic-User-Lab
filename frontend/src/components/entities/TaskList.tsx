@@ -45,7 +45,6 @@ export default function TaskList({ search = '' }: { search?: string }) {
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => { setEditItem(null); setModalOpen(true); }}
-          className="btn-primary-gradient"
           style={{ fontWeight: 500 }}
         >
           + New Task
@@ -62,7 +61,7 @@ export default function TaskList({ search = '' }: { search?: string }) {
             {search ? 'Try a different search term.' : 'Create one to get started.'}
           </p>
           {!search && (
-            <Button type="primary" onClick={() => setModalOpen(true)} className="btn-primary-gradient">
+            <Button type="primary" onClick={() => setModalOpen(true)}>
               Create Task
             </Button>
           )}
@@ -82,7 +81,7 @@ export default function TaskList({ search = '' }: { search?: string }) {
                   <Avatar
                     size={40}
                     icon={<FileTextOutlined />}
-                    style={{ backgroundColor: '#f0fdf4', color: 'var(--color-success)', flexShrink: 0 }}
+                    style={{ backgroundColor: 'var(--geist-overlay)', color: 'var(--geist-foreground-tertiary)', flexShrink: 0 }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -92,8 +91,8 @@ export default function TaskList({ search = '' }: { search?: string }) {
                           fontSize: 11,
                           borderRadius: 6,
                           margin: 0,
-                          background: t.risk_level === 'high' ? '#fef2f2' : t.risk_level === 'medium' ? '#fffbeb' : '#f0fdf4',
-                          color: t.risk_level === 'high' ? 'var(--color-error)' : t.risk_level === 'medium' ? 'var(--color-warning)' : 'var(--color-success)',
+                          background: 'var(--geist-overlay)',
+                          color: t.risk_level === 'high' ? 'var(--geist-error)' : t.risk_level === 'medium' ? 'var(--geist-warning)' : 'var(--geist-success)',
                           border: 'none',
                         }}
                       >

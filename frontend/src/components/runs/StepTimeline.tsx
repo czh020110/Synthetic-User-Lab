@@ -1,4 +1,4 @@
-import { Card, Timeline, Image, Typography, Badge } from 'antd';
+import { Card, Timeline, Image, Typography } from 'antd';
 import { CheckCircleFilled, CloseCircleFilled, ClockCircleOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import type { StepLog } from '../../types/report';
@@ -15,13 +15,13 @@ export default function StepTimeline({ steps }: { steps: StepLog[] }) {
     const status = step.validation_result?.status || 'pending';
     let dot;
     if (status === 'succeeded') {
-      dot = <CheckCircleFilled style={{ fontSize: 16, color: 'var(--color-success)' }} />;
+      dot = <CheckCircleFilled style={{ fontSize: 14, color: 'var(--geist-success)' }} />;
     } else if (status === 'running') {
-      dot = <LoadingOutlined style={{ fontSize: 16, color: 'var(--color-primary)', animation: 'pulse 1.5s infinite' }} />;
+      dot = <LoadingOutlined style={{ fontSize: 14, color: 'var(--geist-foreground)', animation: 'pulse 1.5s infinite' }} />;
     } else if (status === 'failed') {
-      dot = <CloseCircleFilled style={{ fontSize: 16, color: 'var(--color-error)' }} />;
+      dot = <CloseCircleFilled style={{ fontSize: 14, color: 'var(--geist-error)' }} />;
     } else {
-      dot = <ClockCircleOutlined style={{ fontSize: 16, color: 'var(--color-text-muted)' }} />;
+      dot = <ClockCircleOutlined style={{ fontSize: 14, color: 'var(--geist-foreground-tertiary)' }} />;
     }
 
     const screenshotUrl = screenshotPathToUrl(step.observed_page_state?.screenshot_path);
@@ -37,41 +37,43 @@ export default function StepTimeline({ steps }: { steps: StepLog[] }) {
           style={{ cursor: 'pointer', userSelect: 'none' }}
           onClick={() => setExpandedStep(isExpanded ? null : step.step_index)}
         >
-          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text-primary)' }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--geist-foreground)' }}>
             Step {step.step_index}: {actionType}
           </div>
           {actionReason && (
-            <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: 'var(--geist-foreground-tertiary)', marginTop: 2 }}>
               {actionReason}
             </div>
           )}
 
-          {/* Collapsible content */}
           <div style={{
             maxHeight: isExpanded ? 1000 : 0,
             overflow: 'hidden',
-            transition: 'max-height 0.3s ease',
+            transition: 'max-height 150ms ease',
           }}>
             {progressSummary && (
               <div style={{
-                marginTop: 6,
-                padding: '6px 10px',
-                background: 'var(--color-bg)',
+                marginTop: 8,
+                padding: '8px 12px',
+                background: 'var(--geist-code-bg)',
                 borderRadius: 4,
                 fontSize: 12,
-                color: 'var(--color-text-secondary)',
+                fontFamily: '"SF Mono", "Fira Code", "Cascadia Code", monospace',
+                color: 'var(--geist-foreground-secondary)',
+                lineHeight: 1.5,
               }}>
                 {progressSummary}
               </div>
             )}
             {step.execution_result?.error_message && (
               <div style={{
-                marginTop: 4,
-                padding: '6px 10px',
-                background: '#fff2f0',
+                marginTop: 6,
+                padding: '8px 12px',
+                background: 'var(--geist-overlay)',
                 borderRadius: 4,
                 fontSize: 12,
-                color: 'var(--color-error)',
+                color: 'var(--geist-error)',
+                border: '1px solid var(--geist-border)',
               }}>
                 {step.execution_result.error_message}
               </div>
@@ -82,9 +84,9 @@ export default function StepTimeline({ steps }: { steps: StepLog[] }) {
                 alt={`Step ${step.step_index}`}
                 style={{
                   marginTop: 8,
-                  maxWidth: '200px',
-                  borderRadius: 6,
-                  border: '1px solid var(--color-border)',
+                  maxWidth: 200,
+                  borderRadius: 4,
+                  border: '1px solid var(--geist-border)',
                   cursor: 'pointer',
                 }}
                 onClick={(e) => {
@@ -93,12 +95,11 @@ export default function StepTimeline({ steps }: { steps: StepLog[] }) {
                 }}
               />
             )}
-            <div style={{ marginTop: 4, fontSize: 11, color: 'var(--color-text-muted)' }}>
+            <div style={{ marginTop: 4, fontSize: 11, fontFamily: '"SF Mono", "Fira Code", "Cascadia Code", monospace', color: 'var(--geist-foreground-tertiary)' }}>
               {dayjs(step.before_page_state?.current_url).format('HH:mm:ss')}
             </div>
           </div>
 
-          {/* Expand hint */}
           {!isExpanded && (
             <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 2 }}>
               Click to expand
@@ -110,13 +111,7 @@ export default function StepTimeline({ steps }: { steps: StepLog[] }) {
   });
 
   return (
-    <Card>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Text style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text-primary)' }}>
-          Step Timeline
-        </Text>
-        <Badge count={steps.length} style={{ backgroundColor: 'var(--color-bg)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }} />
-      </div>
+    <Card className="demo-card">
       <Timeline items={items} />
       <Image
         src={previewUrl || ''}

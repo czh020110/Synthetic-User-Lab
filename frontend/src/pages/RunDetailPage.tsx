@@ -1,4 +1,4 @@
-import { Card, Typography, Button, Badge, Tag, Space, Breadcrumb } from 'antd';
+import { Card, Typography, Button, Badge, Space, Breadcrumb } from 'antd';
 import { FileSearchOutlined, ArrowLeftOutlined, CalendarOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useRunDetail } from '../hooks/useRunDetail';
@@ -84,37 +84,28 @@ export default function RunDetailPage() {
       />
 
       {/* Header */}
-      <div className="page-header" style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+      <div className="page-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
           <Button
             type="text"
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate('/')}
-            style={{ borderRadius: 8 }}
           />
-          <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+          <Title level={1} className="page-title">
             Run Detail
           </Title>
         </div>
-        <Text style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>
+        <Text className="page-subtitle">
           {isDemo ? 'Demo Run' : 'Formal Run'} — {statusLabels[status.status]}
         </Text>
       </div>
 
       {/* Status Card */}
-      <Card
-        className="demo-card"
-        style={{ marginBottom: 24, borderRadius: 12, border: '1px solid var(--color-border)' }}
-      >
+      <Card className="demo-card" style={{ marginBottom: 24 }}>
         <div className="run-header" style={{ marginBottom: 12 }}>
           <StatusBadge status={status.status} />
-          <Text style={{ fontSize: 14, color: 'var(--color-text-secondary)', fontWeight: 500 }}>
-            {statusLabels[status.status]}
-          </Text>
-          <Tag style={{ fontSize: 12, borderRadius: 6, background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
-            {displayId}
-          </Tag>
-          <Text style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+          <span className="run-id">{displayId}</span>
+          <Text className="run-time">
             <CalendarOutlined style={{ marginRight: 4 }} />
             {dayjs(status.created_at).format('YYYY-MM-DD HH:mm:ss')}
           </Text>
@@ -132,7 +123,6 @@ export default function RunDetailPage() {
                 type="primary"
                 icon={<FileSearchOutlined />}
                 onClick={() => navigate(`/runs/${runId}/report`)}
-                className="btn-primary-gradient"
               >
                 View Report
               </Button>
@@ -143,18 +133,22 @@ export default function RunDetailPage() {
         {status.error_message && (
           <div className="error-card" style={{ marginTop: 16, textAlign: 'left' }}>
             <div className="error-icon">⚠️</div>
-            <h4 style={{ margin: '0 0 4px 0', color: 'var(--color-error)', fontWeight: 600 }}>
-              {status.error_type || 'Error'}
-            </h4>
-            <p style={{ margin: 0, color: '#666', fontSize: 13 }}>{status.error_message}</p>
+            <h4>{status.error_type || 'Error'}</h4>
+            <p>{status.error_message}</p>
           </div>
         )}
 
         {/* Progress indicator */}
         {(isRunning || isQueued) && (
-          <div style={{ marginTop: 16, padding: 16, background: '#f6ffed', borderRadius: 8, border: '1px solid #b7eb8f' }}>
+          <div style={{
+            marginTop: 16,
+            padding: '12px 16px',
+            background: 'var(--geist-overlay)',
+            borderRadius: 5,
+            border: '1px solid var(--geist-border)',
+          }}>
             <Space>
-              <Text style={{ color: '#52c41a', fontWeight: 500 }}>
+              <Text style={{ color: 'var(--geist-foreground-secondary)', fontWeight: 500, fontSize: 13 }}>
                 {isRunning ? '执行中...步骤数据实时更新' : '等待执行...'}
               </Text>
             </Space>
@@ -166,16 +160,16 @@ export default function RunDetailPage() {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Title level={4} style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+            <Title level={4} style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--geist-foreground)' }}>
               Steps
             </Title>
             {steps && (
               <Badge
                 count={steps.length}
                 style={{
-                  backgroundColor: 'var(--color-bg)',
-                  color: 'var(--color-text-muted)',
-                  border: '1px solid var(--color-border)',
+                  backgroundColor: 'var(--geist-code-bg)',
+                  color: 'var(--geist-foreground-tertiary)',
+                  border: '1px solid var(--geist-border-secondary)',
                   borderRadius: 10,
                   fontSize: 12,
                   fontWeight: 600,

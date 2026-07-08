@@ -104,20 +104,18 @@ export default function HelpPage() {
           type="text"
           icon={<ArrowLeftOutlined />}
           onClick={() => navigate('/')}
-          style={{ borderRadius: 8 }}
         />
-        <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+        <Title level={1} className="page-title">
           Help & Documentation
         </Title>
       </div>
 
-      {/* Introduction */}
-      <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)', marginBottom: 24 }}>
+      <Card className="demo-card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-          <QuestionCircleOutlined style={{ fontSize: 48, color: 'var(--color-primary)' }} />
+          <QuestionCircleOutlined style={{ fontSize: 40, color: 'var(--geist-foreground-tertiary)' }} />
           <div>
             <Title level={3} style={{ marginTop: 0 }}>Welcome to Synthetic User Lab</Title>
-            <Paragraph style={{ fontSize: 15, lineHeight: 1.6 }}>
+            <Paragraph style={{ fontSize: 14, lineHeight: 1.6 }}>
               Synthetic User Lab is an automated UX testing platform that uses AI agents to simulate user behavior.
               It helps you identify usability issues, friction points, and areas for improvement in your web applications.
             </Paragraph>
@@ -125,8 +123,7 @@ export default function HelpPage() {
         </div>
       </Card>
 
-      {/* Key Features */}
-      <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)', marginBottom: 24 }}>
+      <Card className="demo-card" style={{ marginBottom: 24 }}>
         <Title level={4}>Key Features</Title>
         <List
           grid={{ gutter: 24, xs: 1, sm: 2 }}
@@ -134,7 +131,7 @@ export default function HelpPage() {
           renderItem={(item) => (
             <List.Item>
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                <div style={{ fontSize: 24, color: 'var(--color-primary)' }}>{item.icon}</div>
+                <div style={{ fontSize: 20, color: 'var(--geist-foreground-tertiary)' }}>{item.icon}</div>
                 <div>
                   <Text strong style={{ display: 'block', marginBottom: 4 }}>{item.title}</Text>
                   <Text type="secondary" style={{ fontSize: 13 }}>{item.description}</Text>
@@ -145,8 +142,7 @@ export default function HelpPage() {
         />
       </Card>
 
-      {/* Quick Start Guide */}
-      <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)', marginBottom: 24 }}>
+      <Card className="demo-card" style={{ marginBottom: 24 }}>
         <Title level={4}>Quick Start Guide</Title>
         <Steps
           direction="vertical"
@@ -155,8 +151,7 @@ export default function HelpPage() {
         />
       </Card>
 
-      {/* FAQ */}
-      <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
+      <Card className="demo-card">
         <Title level={4}>Frequently Asked Questions</Title>
         <Collapse items={faqItems} />
       </Card>

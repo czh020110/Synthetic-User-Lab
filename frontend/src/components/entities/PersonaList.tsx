@@ -44,7 +44,6 @@ export default function PersonaList({ search = '' }: { search?: string }) {
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => { setEditItem(null); setModalOpen(true); }}
-          className="btn-primary-gradient"
           style={{ fontWeight: 500 }}
         >
           + New Persona
@@ -64,7 +63,6 @@ export default function PersonaList({ search = '' }: { search?: string }) {
             <Button
               type="primary"
               onClick={() => setModalOpen(true)}
-              className="btn-primary-gradient"
             >
               Create Persona
             </Button>
@@ -77,7 +75,7 @@ export default function PersonaList({ search = '' }: { search?: string }) {
               key={p.id}
               className="demo-card"
               size="small"
-              style={{ borderRadius: 12, border: '1px solid var(--color-border)', padding: '0', cursor: 'pointer' }}
+              style={{ borderRadius: 12, border: '1px solid var(--color-border)', cursor: 'pointer' }}
               onClick={() => navigate(`/entities/personas/${p.id}`)}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 20px' }}>
@@ -85,7 +83,7 @@ export default function PersonaList({ search = '' }: { search?: string }) {
                   <Avatar
                     size={40}
                     icon={<UserOutlined />}
-                    style={{ backgroundColor: '#eff6ff', color: 'var(--color-primary)', flexShrink: 0 }}
+                    style={{ backgroundColor: 'var(--geist-overlay)', color: 'var(--geist-foreground-tertiary)', flexShrink: 0 }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>

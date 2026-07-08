@@ -101,9 +101,8 @@ export default function SettingsPage() {
             type="text"
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate('/')}
-            style={{ borderRadius: 8 }}
           />
-          <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+          <Title level={1} className="page-title">
             {t('settings.title')}
           </Title>
         </div>
@@ -123,9 +122,8 @@ export default function SettingsPage() {
           type="text"
           icon={<ArrowLeftOutlined />}
           onClick={() => navigate('/')}
-          style={{ borderRadius: 8 }}
         />
-        <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+        <Title level={1} className="page-title">
           {t('settings.title')}
         </Title>
       </div>
@@ -140,7 +138,7 @@ export default function SettingsPage() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-        <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
+        <Card className="demo-card">
           <Title level={4} style={{ marginBottom: 16 }}>{t('settings.general')}</Title>
           <Form form={generalForm} layout="vertical">
             <Form.Item name="language" label={t('settings.language')}>
@@ -181,7 +179,7 @@ export default function SettingsPage() {
           </Form>
         </Card>
 
-        <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
+        <Card className="demo-card">
           <Title level={4} style={{ marginBottom: 16 }}>{t('settings.run')}</Title>
           <Form form={runForm} layout="vertical">
             <Form.Item name="defaultHeadless" label={t('settings.defaultHeadless')} valuePropName="checked">
@@ -210,7 +208,7 @@ export default function SettingsPage() {
           </Form>
         </Card>
 
-        <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
+        <Card className="demo-card">
           <Title level={4} style={{ marginBottom: 16 }}>{t('settings.notifications')}</Title>
           <Form form={notifForm} layout="vertical">
             <Form.Item name="emailNotifications" label={t('settings.emailNotifications')} valuePropName="checked">
@@ -229,21 +227,21 @@ export default function SettingsPage() {
           </Form>
         </Card>
 
-        <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
+        <Card className="demo-card">
           <Title level={4} style={{ marginBottom: 16 }}>{t('settings.about')}</Title>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <Text style={{ fontSize: 13, color: 'var(--color-text-muted)', display: 'block', marginBottom: 4 }}>{t('settings.version')}</Text>
+              <Text style={{ fontSize: 13, color: 'var(--geist-foreground-tertiary)', display: 'block', marginBottom: 4 }}>{t('settings.version')}</Text>
               <Text style={{ fontSize: 18, fontWeight: 600 }}>1.0.0</Text>
             </div>
             <div>
-              <Text style={{ fontSize: 13, color: 'var(--color-text-muted)', display: 'block', marginBottom: 4 }}>{t('settings.description')}</Text>
+              <Text style={{ fontSize: 13, color: 'var(--geist-foreground-tertiary)', display: 'block', marginBottom: 4 }}>{t('settings.description')}</Text>
               <Paragraph style={{ margin: 0, fontSize: 14 }}>
                 Synthetic User Lab - Automated UX testing platform using AI agents to simulate user behavior.
               </Paragraph>
             </div>
             <div>
-              <Text style={{ fontSize: 13, color: 'var(--color-text-muted)', display: 'block', marginBottom: 4 }}>{t('settings.links')}</Text>
+              <Text style={{ fontSize: 13, color: 'var(--geist-foreground-tertiary)', display: 'block', marginBottom: 4 }}>{t('settings.links')}</Text>
               <Space direction="vertical">
                 <a href="https://github.com" target="_blank" rel="noopener noreferrer">{t('settings.github')}</a>
                 <a href="https://docs.example.com" target="_blank" rel="noopener noreferrer">{t('settings.docs')}</a>
@@ -255,7 +253,7 @@ export default function SettingsPage() {
 
       <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
         <Button onClick={() => navigate('/')}>{t('common.cancel')}</Button>
-        <Button type="primary" onClick={handleSave} className="btn-primary-gradient" loading={updateSettings.isPending}>
+        <Button type="primary" onClick={handleSave} loading={updateSettings.isPending}>
           {t('common.save')}
         </Button>
       </div>

@@ -1,4 +1,4 @@
-import { Card, Button, Table, message, Typography, Segmented, Space } from 'antd';
+import { Button, Table, message, Typography, Segmented, Space } from 'antd';
 import { PlayCircleOutlined, ArrowRightOutlined, RocketOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -36,16 +36,16 @@ export default function DashboardPage() {
 
   const columns = [
     {
-      title: 'Run ID',
+      title: 'RUN ID',
       dataIndex: 'run_id',
       key: 'run_id',
       width: 160,
       render: (id: string) => (
         <span
           style={{
-            fontFamily: 'SFMono-Regular, Consolas, monospace',
-            fontSize: 13,
-            color: 'var(--color-primary)',
+            fontFamily: '"SF Mono", "Fira Code", "Cascadia Code", monospace',
+            fontSize: 12,
+            color: 'var(--geist-foreground-tertiary)',
             cursor: 'pointer',
             fontWeight: 500,
           }}
@@ -56,25 +56,25 @@ export default function DashboardPage() {
       ),
     },
     {
-      title: 'Status',
+      title: 'STATUS',
       dataIndex: 'status',
       key: 'status',
       width: 120,
       render: (status: string) => <StatusBadge status={status as any} />,
     },
     {
-      title: 'Created',
+      title: 'CREATED',
       dataIndex: 'created_at',
       key: 'created_at',
       width: 180,
       render: (v: string) => (
-        <Text style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>
+        <Text style={{ color: 'var(--geist-foreground-tertiary)', fontSize: 12 }}>
           {dayjs(v).format('YYYY-MM-DD HH:mm')}
         </Text>
       ),
     },
     {
-      title: 'Actions',
+      title: 'ACTIONS',
       key: 'actions',
       width: 180,
       render: (_: any, record: any) => (
@@ -83,7 +83,7 @@ export default function DashboardPage() {
             type="link"
             size="small"
             onClick={() => navigate(`/runs/${record.run_id}`)}
-            style={{ fontWeight: 500, padding: 0 }}
+            style={{ fontWeight: 500, padding: 0, fontSize: 12 }}
           >
             Detail
           </Button>
@@ -92,7 +92,7 @@ export default function DashboardPage() {
               type="link"
               size="small"
               onClick={() => navigate(`/runs/${record.run_id}/report`)}
-              style={{ fontWeight: 500, padding: 0 }}
+              style={{ fontWeight: 500, padding: 0, fontSize: 12 }}
             >
               Report
             </Button>
@@ -105,52 +105,40 @@ export default function DashboardPage() {
   return (
     <div>
       <div className="page-header">
-        <Title level={1} className="page-title" style={{ fontSize: 28, fontWeight: 700 }}>
-          Dashboard
+        <Title level={1} className="page-title" style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.6px' }}>
+          Overview
         </Title>
         <Text className="page-subtitle">
-          Synthetic User Lab — 自动化用户体验测试平台
+          Synthetic User Lab — Automated UX Testing Platform
         </Text>
       </div>
 
       {/* Stats */}
       <div className="stats-row">
-        <Card className="stat-card" bordered={false} style={{ borderRadius: 12 }}>
-          <Text style={{ fontSize: 32, fontWeight: 700, color: 'var(--color-text-primary)', display: 'block', lineHeight: 1.2 }}>
-            {stats.total}
-          </Text>
-          <Text style={{ fontSize: 13, color: 'var(--color-text-muted)', fontWeight: 500 }}>Total Runs</Text>
-        </Card>
-        <Card className="stat-card" bordered={false} style={{ borderRadius: 12 }}>
-          <Text style={{ fontSize: 32, fontWeight: 700, color: 'var(--color-success)', display: 'block', lineHeight: 1.2 }}>
-            {stats.succeeded}
-          </Text>
-          <Text style={{ fontSize: 13, color: 'var(--color-text-muted)', fontWeight: 500 }}>Succeeded</Text>
-        </Card>
-        <Card className="stat-card" bordered={false} style={{ borderRadius: 12 }}>
-          <Text style={{ fontSize: 32, fontWeight: 700, color: 'var(--color-error)', display: 'block', lineHeight: 1.2 }}>
-            {stats.failed}
-          </Text>
-          <Text style={{ fontSize: 13, color: 'var(--color-text-muted)', fontWeight: 500 }}>Failed</Text>
-        </Card>
-        <Card className="stat-card" bordered={false} style={{ borderRadius: 12 }}>
-          <Text style={{ fontSize: 32, fontWeight: 700, color: 'var(--color-primary)', display: 'block', lineHeight: 1.2 }}>
-            {stats.running}
-          </Text>
-          <Text style={{ fontSize: 13, color: 'var(--color-text-muted)', fontWeight: 500 }}>Running</Text>
-        </Card>
+        <div className="stat-card">
+          <Text className="stat-value">{stats.total}</Text>
+          <Text className="stat-label">Total Runs</Text>
+        </div>
+        <div className="stat-card">
+          <Text className="stat-value">{stats.succeeded}</Text>
+          <Text className="stat-label">Succeeded</Text>
+        </div>
+        <div className="stat-card">
+          <Text className="stat-value">{stats.failed}</Text>
+          <Text className="stat-label">Failed</Text>
+        </div>
+        <div className="stat-card">
+          <Text className="stat-value">{stats.running}</Text>
+          <Text className="stat-label">Running</Text>
+        </div>
       </div>
 
       {/* Quick Start */}
-      <div className="quick-start-card" style={{ marginBottom: 28 }}>
+      <div className="quick-start-card" style={{ marginBottom: 32 }}>
         <div className="quick-start-content">
-          <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-            Launch Demo Run
-          </h3>
-          <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: 14, lineHeight: 1.6 }}>
-            启动一个演示运行，使用预设的 Persona 和 Task
-            <br />
-            快速体验完整的自动化测试流程。
+          <h3>Launch Demo Run</h3>
+          <p>
+            Start a demo run with preset Persona and Task to experience the full automated testing workflow.
           </p>
         </div>
         <div className="quick-start-action">
@@ -160,7 +148,7 @@ export default function DashboardPage() {
             icon={<PlayCircleOutlined />}
             loading={startDemo.isPending}
             onClick={handleStartDemo}
-            className="btn-primary-gradient"
+            style={{ height: 36, fontWeight: 600 }}
           >
             Launch Demo Run
           </Button>
@@ -168,13 +156,13 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 28, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 32, flexWrap: 'wrap' }}>
         <Button
           type="primary"
           icon={<RocketOutlined />}
           onClick={() => navigate('/runs/new')}
-          className="btn-primary-gradient"
           size="large"
+          style={{ height: 36, fontWeight: 600 }}
         >
           Start Formal Run
         </Button>
@@ -190,7 +178,7 @@ export default function DashboardPage() {
       {/* Recent Runs */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-          <Title level={4} style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+          <Title level={4} style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--geist-foreground)' }}>
             Recent Runs
           </Title>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -218,13 +206,9 @@ export default function DashboardPage() {
 
         {allRuns.length === 0 && !isLoading ? (
           <div className="empty-state" style={{ padding: 48 }}>
-            <div className="empty-icon" style={{ fontSize: 40, marginBottom: 12 }}>🚀</div>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: 15, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-              No runs yet
-            </h4>
-            <p style={{ margin: '0 0 16px 0', color: 'var(--color-text-muted)', fontSize: 14 }}>
-              Launch your first demo run above to get started.
-            </p>
+            <div className="empty-icon">🚀</div>
+            <h4>No runs yet</h4>
+            <p>Launch your first demo run above to get started.</p>
           </div>
         ) : (
           <div className="demo-table">

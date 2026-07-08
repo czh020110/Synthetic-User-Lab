@@ -82,7 +82,6 @@ export default function KnowledgeList({ search = '' }: { search?: string }) {
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => { setEditItem(null); setModalOpen(true); }}
-          className="btn-primary-gradient"
           style={{ fontWeight: 500 }}
         >
           + New Knowledge
@@ -101,7 +100,7 @@ export default function KnowledgeList({ search = '' }: { search?: string }) {
             {search ? 'Try a different search term.' : 'Knowledge items power RAG retrieval for runs.'}
           </p>
           {!search && (
-            <Button type="primary" onClick={() => { setEditItem(null); setModalOpen(true); }} className="btn-primary-gradient">
+            <Button type="primary" onClick={() => { setEditItem(null); setModalOpen(true); }}>
               Create Knowledge Item
             </Button>
           )}
@@ -125,8 +124,8 @@ export default function KnowledgeList({ search = '' }: { search?: string }) {
                       size={40}
                       icon={<BookOutlined />}
                       style={{
-                        backgroundColor: st === 'product_knowledge' ? '#eff6ff' : '#fff7ed',
-                        color: st === 'product_knowledge' ? 'var(--color-primary)' : 'var(--color-warning)',
+                        backgroundColor: 'var(--geist-overlay)',
+                        color: st === 'product_knowledge' ? 'var(--geist-info)' : 'var(--geist-warning)',
                         flexShrink: 0,
                       }}
                     />

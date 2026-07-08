@@ -5,12 +5,10 @@ import {
   PlayCircleOutlined,
   RocketOutlined,
   QuestionCircleOutlined,
-  UserOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { useFrontendSettings } from '../../hooks/useFrontendSettings';
-import { resolveThemeMode } from '../../theme';
 
 const { Sider, Content } = Layout;
 
@@ -18,8 +16,6 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const { data: settings } = useFrontendSettings();
-  const isDark = resolveThemeMode(settings?.theme ?? 'light') === 'dark';
 
   const menuItems = [
     { key: '/', icon: <DashboardOutlined />, label: t('nav.dashboard') },
@@ -46,17 +42,13 @@ export default function AppLayout() {
 
   return (
     <div className="app-layout">
-      <Sider
-        className="app-sider"
-        width={220}
-        theme={isDark ? 'dark' : 'light'}
-      >
+      <Sider className="app-sider" width={240} theme="dark">
         <div className="app-logo">
           <RocketOutlined className="logo-icon" />
           <span className="logo-text">Synthetic User Lab</span>
         </div>
         <Menu
-          theme="light"
+          theme="dark"
           mode="inline"
           selectedKeys={[selectedKey]}
           items={menuItems}
@@ -65,37 +57,61 @@ export default function AppLayout() {
         />
 
         {/* Bottom Actions */}
-        <div style={{
-          position: 'absolute',
-          bottom: 16,
-          left: 16,
-          right: 16,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
-        }}>
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 16,
+            left: 16,
+            right: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}
+        >
           <Button
             type="primary"
             icon={<PlayCircleOutlined />}
             block
-            className="btn-primary-gradient"
             onClick={() => navigate('/runs/new')}
-            style={{ height: 40 }}
+            style={{
+              height: 36,
+              fontWeight: 600,
+              borderRadius: 6,
+              background: '#fafafa',
+              borderColor: '#fafafa',
+              color: '#000',
+            }}
           >
             {t('nav.startRun')}
           </Button>
           <div style={{ display: 'flex', gap: 8 }}>
             <Button
-              icon={<UserOutlined />}
+              icon={<SettingOutlined />}
               onClick={() => navigate('/settings')}
-              style={{ flex: 1, height: 36 }}
+              style={{
+                flex: 1,
+                height: 32,
+                fontSize: 12,
+                color: '#888',
+                borderColor: 'rgba(255,255,255,0.1)',
+              }}
+              type="default"
+              ghost
             >
               {t('nav.settings')}
             </Button>
             <Button
               icon={<QuestionCircleOutlined />}
               onClick={() => navigate('/help')}
-              style={{ flex: 1, height: 36 }}
+              style={{
+                flex: 1,
+                height: 32,
+                fontSize: 12,
+                color: '#888',
+                borderColor: 'rgba(255,255,255,0.1)',
+              }}
+              type="default"
+              ghost
             >
               {t('nav.help')}
             </Button>

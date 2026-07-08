@@ -48,26 +48,23 @@ export default function PersonaDetailPage() {
 
   return (
     <div>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <Button
           type="text"
           icon={<ArrowLeftOutlined />}
           onClick={() => navigate('/entities')}
-          style={{ borderRadius: 8 }}
         />
-        <Title level={2} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+        <Title level={2} className="page-title">
           {persona.name}
         </Title>
         <Tag color="blue">{persona.skill_level}</Tag>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-        {/* Left Column - Main Info */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
+          <Card className="demo-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-              <Text style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              <Text style={{ fontSize: 16, fontWeight: 600, color: 'var(--geist-foreground)' }}>
                 Persona Details
               </Text>
               <Space>
@@ -100,17 +97,16 @@ export default function PersonaDetailPage() {
               </Descriptions.Item>
             </Descriptions>
             <Divider style={{ margin: '16px 0' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--color-text-muted)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--geist-foreground-tertiary)' }}>
               <span>Created: {dayjs(persona.created_at).format('YYYY-MM-DD HH:mm')}</span>
               <span>Updated: {dayjs(persona.updated_at).format('YYYY-MM-DD HH:mm')}</span>
             </div>
           </Card>
         </div>
 
-        {/* Right Column - Stats & Actions */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
-            <Text style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)', display: 'block', marginBottom: 16 }}>
+          <Card className="demo-card">
+            <Text style={{ fontSize: 16, fontWeight: 600, color: 'var(--geist-foreground)', display: 'block', marginBottom: 16 }}>
               Quick Actions
             </Text>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -118,7 +114,6 @@ export default function PersonaDetailPage() {
                 type="primary"
                 icon={<PlayCircleOutlined />}
                 onClick={handleStartRun}
-                className="btn-primary-gradient"
                 block
               >
                 Start New Run
@@ -133,22 +128,22 @@ export default function PersonaDetailPage() {
             </div>
           </Card>
 
-          <Card className="demo-card" style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
-            <Text style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)', display: 'block', marginBottom: 16 }}>
+          <Card className="demo-card">
+            <Text style={{ fontSize: 16, fontWeight: 600, color: 'var(--geist-foreground)', display: 'block', marginBottom: 16 }}>
               Persona Attributes
             </Text>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
-                <Text style={{ fontSize: 13, color: 'var(--color-text-muted)', display: 'block', marginBottom: 4 }}>Skill Level</Text>
-                <Text style={{ fontSize: 18, fontWeight: 600 }}>{persona.skill_level}</Text>
+                <Text style={{ fontSize: 12, color: 'var(--geist-foreground-tertiary)', display: 'block', marginBottom: 2 }}>Skill Level</Text>
+                <Text style={{ fontSize: 16, fontWeight: 600 }}>{persona.skill_level}</Text>
               </div>
               <div>
-                <Text style={{ fontSize: 13, color: 'var(--color-text-muted)', display: 'block', marginBottom: 4 }}>Patience</Text>
-                <Text style={{ fontSize: 18, fontWeight: 600 }}>{persona.patience_level}</Text>
+                <Text style={{ fontSize: 12, color: 'var(--geist-foreground-tertiary)', display: 'block', marginBottom: 2 }}>Patience</Text>
+                <Text style={{ fontSize: 16, fontWeight: 600 }}>{persona.patience_level}</Text>
               </div>
               <div>
-                <Text style={{ fontSize: 13, color: 'var(--color-text-muted)', display: 'block', marginBottom: 4 }}>Risk Preference</Text>
-                <Text style={{ fontSize: 18, fontWeight: 600 }}>{persona.risk_preference}</Text>
+                <Text style={{ fontSize: 12, color: 'var(--geist-foreground-tertiary)', display: 'block', marginBottom: 2 }}>Risk Preference</Text>
+                <Text style={{ fontSize: 16, fontWeight: 600 }}>{persona.risk_preference}</Text>
               </div>
             </div>
           </Card>

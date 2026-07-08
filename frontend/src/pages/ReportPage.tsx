@@ -48,9 +48,8 @@ export default function ReportPage() {
             type="text"
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate(`/runs/${runId}`)}
-            style={{ borderRadius: 8 }}
           />
-          <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+          <Title level={1} className="page-title">
             Report
           </Title>
         </div>
@@ -96,9 +95,8 @@ export default function ReportPage() {
             type="text"
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate(`/runs/${runId}`)}
-            style={{ borderRadius: 8 }}
           />
-          <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+          <Title level={1} className="page-title">
             Report
           </Title>
         </div>
