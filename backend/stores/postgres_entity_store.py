@@ -13,6 +13,7 @@ from psycopg_pool import ConnectionPool
 from backend.core.utils import utc_now
 from backend.schemas.knowledge_schemas import KnowledgeItem, KnowledgeItemUpdate
 from backend.schemas.persona_schemas import Persona, PersonaUpdate
+from backend.schemas.settings_schemas import FRONTEND_SETTINGS_KEY, FrontendSettings
 from backend.schemas.task_schemas import Task, TaskUpdate
 
 SCHEMA_STATEMENTS = (
@@ -44,6 +45,14 @@ SCHEMA_STATEMENTS = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_knowledge_items_source_type ON knowledge_items(source_type)",
+    """
+    CREATE TABLE IF NOT EXISTS frontend_settings (
+        settings_key   TEXT PRIMARY KEY,
+        settings_json  JSONB NOT NULL,
+        created_at     TIMESTAMPTZ NOT NULL,
+        updated_at     TIMESTAMPTZ NOT NULL
+    )
+    """,
 )
 
 
@@ -258,9 +267,48 @@ class PostgresEntityStore:
                 cursor = conn.execute("DELETE FROM knowledge_items WHERE item_id = %s", (item_id,))
         return cursor.rowcount > 0
 
+    def get_frontend_settings(self) -> FrontendSettings:
+        with self._get_pool().connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM frontend_settings WHERE settings_key = %s",
+                (FRONTEND_SETTINGS_KEY,),
+            ).fetchone()
+        if row is None:
+            # 读路径不写：未保存时返回默认值，仅在显式 PUT 时持久化，
+            # 避免 GET 产生副作用与并发冷启动竞争。
+            return FrontendSettings(settings_key=FRONTEND_SETTINGS_KEY)
+        payload = _model_from_payload(FrontendSettings, row["settings_json"])
+        return FrontendSettings(
+            settings_key=row["settings_key"],
+            **payload.model_dump(exclude={"settings_key", "created_at", "updated_at"}),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def upsert_frontend_settings(self, settings: FrontendSettings) -> FrontendSettings:
+        with self._get_pool().connection() as conn:
+            with conn.transaction():
+                conn.execute(
+                    """
+                    INSERT INTO frontend_settings (settings_key, settings_json, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (settings_key) DO UPDATE SET
+                        settings_json = excluded.settings_json,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        settings.settings_key,
+                        _jsonb_payload(settings),
+                        settings.created_at,
+                        settings.updated_at,
+                    ),
+                )
+        return self.get_frontend_settings()
+
     def clear(self) -> None:
         with self._get_pool().connection() as conn:
             with conn.transaction():
+                conn.execute("DELETE FROM frontend_settings")
                 conn.execute("DELETE FROM knowledge_items")
                 conn.execute("DELETE FROM tasks")
                 conn.execute("DELETE FROM personas")

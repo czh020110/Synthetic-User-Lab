@@ -1,4 +1,4 @@
-import { Card, Typography, Spin, Result, Button, Badge, Tag, Space, Breadcrumb } from 'antd';
+import { Card, Typography, Button, Badge, Tag, Space, Breadcrumb } from 'antd';
 import { FileSearchOutlined, ArrowLeftOutlined, CalendarOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useRunDetail } from '../hooks/useRunDetail';
@@ -6,6 +6,8 @@ import StatusBadge from '../components/shared/StatusBadge';
 import StepTimeline from '../components/runs/StepTimeline';
 import dayjs from 'dayjs';
 import type { RunStatus } from '../types/run';
+import { AppEmpty, AppErrorState, AppLoading } from '../components/feedback/AppFeedback';
+import { getErrorMessage } from '../lib/api-error';
 
 const { Text, Title } = Typography;
 
@@ -33,15 +35,36 @@ export default function RunDetailPage() {
   };
 
   if (statusQuery.isLoading) {
+    return <AppLoading tip="加载运行详情…" minHeight={260} />;
+  }
+
+  if (statusQuery.isError) {
     return (
-      <div className="loading-container">
-        <Spin size="large" />
-      </div>
+      <AppErrorState
+        title="无法加载运行详情"
+        description={getErrorMessage(statusQuery.error, '请稍后重试')}
+        onRetry={() => statusQuery.refetch()}
+        extra={
+          <Button type="primary" onClick={() => navigate('/')}>
+            Back to Dashboard
+          </Button>
+        }
+      />
     );
   }
 
   if (!status) {
-    return <Result status="404" title="Run Not Found" subTitle="该运行记录不存在或已被删除" />;
+    return (
+      <AppEmpty
+        title="Run Not Found"
+        description="该运行记录不存在或已被删除。"
+        action={
+          <Button type="primary" onClick={() => navigate('/')}>
+            Back to Dashboard
+          </Button>
+        }
+      />
+    );
   }
 
   const isFinished = status.status === 'succeeded' || status.status === 'failed';
@@ -131,7 +154,6 @@ export default function RunDetailPage() {
         {(isRunning || isQueued) && (
           <div style={{ marginTop: 16, padding: 16, background: '#f6ffed', borderRadius: 8, border: '1px solid #b7eb8f' }}>
             <Space>
-              <Spin size="small" />
               <Text style={{ color: '#52c41a', fontWeight: 500 }}>
                 {isRunning ? '执行中...步骤数据实时更新' : '等待执行...'}
               </Text>
@@ -172,23 +194,20 @@ export default function RunDetailPage() {
         </div>
 
         {stepsQuery.isLoading ? (
-          <div className="loading-container" style={{ minHeight: 100 }}>
-            <Spin />
-          </div>
+          <AppLoading tip="加载步骤日志…" minHeight={140} />
+        ) : stepsQuery.isError ? (
+          <AppErrorState
+            title="无法加载步骤日志"
+            description={getErrorMessage(stepsQuery.error, '请稍后重试')}
+            onRetry={() => stepsQuery.refetch()}
+          />
         ) : steps && steps.length > 0 ? (
           <StepTimeline steps={steps} />
         ) : (
-          <div className="empty-state" style={{ padding: 48 }}>
-            <div className="empty-icon" style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: 15, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-              {status.status === 'queued' ? '等待执行...' : '暂无步骤数据'}
-            </h4>
-            {status.status === 'queued' && (
-              <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: 14 }}>
-                Run 已加入队列，执行开始后将显示步骤日志。
-              </p>
-            )}
-          </div>
+          <AppEmpty
+            title={status.status === 'queued' ? '等待执行...' : '暂无步骤数据'}
+            description={status.status === 'queued' ? 'Run 已加入队列，执行开始后将显示步骤日志。' : '当前运行还没有可展示的步骤记录。'}
+          />
         )}
       </div>
     </div>

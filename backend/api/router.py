@@ -12,6 +12,7 @@ from backend.api.routes.knowledge import router as knowledge_router
 from backend.api.routes.personas import router as personas_router
 from backend.api.routes.runs import router as runs_router
 from backend.api.routes.screenshots import router as screenshots_router
+from backend.api.routes.settings import router as settings_router
 from backend.api.routes.tasks import router as tasks_router
 
 api_router = APIRouter()
@@ -20,4 +21,5 @@ api_router.include_router(personas_router)
 api_router.include_router(tasks_router)
 api_router.include_router(knowledge_router)
 api_router.include_router(runs_router)
+api_router.include_router(settings_router)
 api_router.include_router(screenshots_router)

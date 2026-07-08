@@ -12,6 +12,7 @@ from pathlib import Path
 from backend.core.utils import utc_now
 from backend.schemas.knowledge_schemas import KnowledgeItem, KnowledgeItemUpdate
 from backend.schemas.persona_schemas import Persona, PersonaUpdate
+from backend.schemas.settings_schemas import FRONTEND_SETTINGS_KEY, FrontendSettings
 from backend.schemas.task_schemas import Task, TaskUpdate
 
 
@@ -40,6 +41,13 @@ CREATE TABLE IF NOT EXISTS knowledge_items (
     updated_at   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_items_source_type ON knowledge_items(source_type);
+
+CREATE TABLE IF NOT EXISTS frontend_settings (
+    settings_key   TEXT PRIMARY KEY,
+    settings_json  TEXT NOT NULL,
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL
+);
 """
 
 
@@ -248,10 +256,52 @@ class SqliteEntityStore:
         conn.commit()
         return cursor.rowcount > 0
 
+    # ============================ FrontendSettings ============================ #
+
+    def get_frontend_settings(self) -> FrontendSettings:
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM frontend_settings WHERE settings_key = ?",
+            (FRONTEND_SETTINGS_KEY,),
+        ).fetchone()
+        if row is None:
+            # 读路径不写：未保存时返回默认值，仅在显式 PUT 时持久化，
+            # 避免 GET 产生副作用与并发冷启动竞争。
+            return FrontendSettings(settings_key=FRONTEND_SETTINGS_KEY)
+        return FrontendSettings(
+            settings_key=row["settings_key"],
+            **FrontendSettings.model_validate_json(row["settings_json"]).model_dump(
+                exclude={"settings_key", "created_at", "updated_at"}
+            ),
+            created_at=_str_to_dt(row["created_at"]),
+            updated_at=_str_to_dt(row["updated_at"]),
+        )
+
+    def upsert_frontend_settings(self, settings: FrontendSettings) -> FrontendSettings:
+        conn = self._get_conn()
+        conn.execute(
+            """
+            INSERT INTO frontend_settings (settings_key, settings_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(settings_key) DO UPDATE SET
+                settings_json = excluded.settings_json,
+                updated_at = excluded.updated_at
+            """,
+            (
+                settings.settings_key,
+                settings.model_dump_json(),
+                _dt_to_str(settings.created_at),
+                _dt_to_str(settings.updated_at),
+            ),
+        )
+        conn.commit()
+        return self.get_frontend_settings()
+
     # ============================ 通用 ============================ #
 
     def clear(self) -> None:
         conn = self._get_conn()
+        conn.execute("DELETE FROM frontend_settings")
         conn.execute("DELETE FROM knowledge_items")
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM personas")

@@ -8,22 +8,30 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router';
+import { useTranslation } from 'react-i18next';
+import { useFrontendSettings } from '../../hooks/useFrontendSettings';
+import { resolveThemeMode } from '../../theme';
 
 const { Sider, Content } = Layout;
-
-const menuItems = [
-  { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
-  { key: '/entities', icon: <TeamOutlined />, label: 'Entities' },
-  { key: '/runs/new', icon: <RocketOutlined />, label: 'Start Run' },
-];
 
 export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
+  const { data: settings } = useFrontendSettings();
+  const isDark = resolveThemeMode(settings?.theme ?? 'light') === 'dark';
+
+  const menuItems = [
+    { key: '/', icon: <DashboardOutlined />, label: t('nav.dashboard') },
+    { key: '/entities', icon: <TeamOutlined />, label: t('nav.entities') },
+    { key: '/runs/new', icon: <RocketOutlined />, label: t('nav.startRun') },
+  ];
 
   // Determine selected key based on current path
   let selectedKey = location.pathname;
-  if (selectedKey.startsWith('/runs/') && selectedKey !== '/runs/new') {
+  if (selectedKey.startsWith('/runs/compare')) {
+    selectedKey = '/runs/new';
+  } else if (selectedKey.startsWith('/runs/') && selectedKey !== '/runs/new') {
     selectedKey = '/';
   }
   if (selectedKey.startsWith('/entities/')) {
@@ -41,8 +49,7 @@ export default function AppLayout() {
       <Sider
         className="app-sider"
         width={220}
-        theme="light"
-        style={{ background: '#ffffff' }}
+        theme={isDark ? 'dark' : 'light'}
       >
         <div className="app-logo">
           <RocketOutlined className="logo-icon" />
@@ -75,7 +82,7 @@ export default function AppLayout() {
             onClick={() => navigate('/runs/new')}
             style={{ height: 40 }}
           >
-            Start Formal Run
+            {t('nav.startRun')}
           </Button>
           <div style={{ display: 'flex', gap: 8 }}>
             <Button
@@ -83,14 +90,14 @@ export default function AppLayout() {
               onClick={() => navigate('/settings')}
               style={{ flex: 1, height: 36 }}
             >
-              Settings
+              {t('nav.settings')}
             </Button>
             <Button
               icon={<QuestionCircleOutlined />}
               onClick={() => navigate('/help')}
               style={{ flex: 1, height: 36 }}
             >
-              Help
+              {t('nav.help')}
             </Button>
           </div>
         </div>

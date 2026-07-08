@@ -65,3 +65,6 @@ acceptance_reports/
 
 .claude/
 .claude_introduction/
+
+# 防止误在根目录 npm install 产物入库
+node_modules/

@@ -9,6 +9,7 @@ import copy
 from backend.core.utils import utc_now
 from backend.schemas.knowledge_schemas import KnowledgeItem, KnowledgeItemUpdate
 from backend.schemas.persona_schemas import Persona, PersonaUpdate
+from backend.schemas.settings_schemas import FRONTEND_SETTINGS_KEY, FrontendSettings
 from backend.schemas.task_schemas import Task, TaskUpdate
 
 
@@ -19,6 +20,7 @@ class InMemoryEntityStore:
         self._personas: dict[str, Persona] = {}
         self._tasks: dict[str, Task] = {}
         self._knowledge_items: dict[str, KnowledgeItem] = {}
+        self._frontend_settings = FrontendSettings(settings_key=FRONTEND_SETTINGS_KEY)
 
     # ============================ Persona CRUD ============================ #
 
@@ -110,9 +112,19 @@ class InMemoryEntityStore:
         del self._knowledge_items[item_id]
         return True
 
+    # ============================ FrontendSettings ============================ #
+
+    def get_frontend_settings(self) -> FrontendSettings:
+        return self._frontend_settings.model_copy(deep=True)
+
+    def upsert_frontend_settings(self, settings: FrontendSettings) -> FrontendSettings:
+        self._frontend_settings = settings.model_copy(deep=True)
+        return self._frontend_settings.model_copy(deep=True)
+
     # ============================ 通用 ============================ #
 
     def clear(self) -> None:
         self._personas.clear()
         self._tasks.clear()
         self._knowledge_items.clear()
+        self._frontend_settings = FrontendSettings(settings_key=FRONTEND_SETTINGS_KEY)

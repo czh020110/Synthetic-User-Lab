@@ -9,6 +9,7 @@ import pytest
 
 from backend.schemas.knowledge_schemas import KnowledgeItem, KnowledgeItemCreate, KnowledgeItemUpdate
 from backend.schemas.persona_schemas import Persona, PersonaCreate, PersonaUpdate
+from backend.schemas.settings_schemas import FrontendSettings
 from backend.schemas.task_schemas import Task, TaskCreate, TaskUpdate
 
 
@@ -143,6 +144,27 @@ class TestInMemoryEntityStoreKnowledge:
         assert self.store.get_knowledge_item(item.id) is None
 
 
+class TestInMemoryEntityStoreFrontendSettings:
+    def setup_method(self):
+        from backend.stores.in_memory_entity_store import InMemoryEntityStore
+
+        self.store = InMemoryEntityStore()
+
+    def test_get_defaults(self):
+        settings = self.store.get_frontend_settings()
+        assert settings.theme == "light"
+        assert settings.locale == "zh-CN"
+        assert settings.default_max_steps == 30
+
+    def test_upsert_settings(self):
+        settings = self.store.get_frontend_settings()
+        updated = settings.model_copy(update={"theme": "dark", "default_max_steps": 18})
+        saved = self.store.upsert_frontend_settings(updated)
+        assert saved.theme == "dark"
+        assert saved.default_max_steps == 18
+        assert self.store.get_frontend_settings().theme == "dark"
+
+
 # ============================ SqliteEntityStore ============================ #
 
 
@@ -252,3 +274,25 @@ class TestSqliteEntityStoreKnowledge:
         assert updated.title == "新标题"
         assert sqlite_store.delete_knowledge_item(item.id) is True
         assert sqlite_store.get_knowledge_item(item.id) is None
+
+
+class TestSqliteEntityStoreFrontendSettings:
+    def test_get_defaults(self, sqlite_store):
+        settings = sqlite_store.get_frontend_settings()
+        assert settings.theme == "light"
+        assert settings.locale == "zh-CN"
+
+    def test_upsert_and_reopen(self, sqlite_store):
+        from backend.stores.sqlite_entity_store import SqliteEntityStore
+
+        settings = sqlite_store.get_frontend_settings().model_copy(update={"theme": "dark", "default_max_steps": 22})
+        sqlite_store.upsert_frontend_settings(settings)
+        db_path = sqlite_store._db_path
+
+        sqlite_store.close()
+        store2 = SqliteEntityStore(db_path)
+        store2.initialize()
+        got = store2.get_frontend_settings()
+        assert got.theme == "dark"
+        assert got.default_max_steps == 22
+        store2.close()

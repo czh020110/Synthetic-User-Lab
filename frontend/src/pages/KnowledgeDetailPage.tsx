@@ -1,4 +1,4 @@
-import { Card, Typography, Spin, Result, Button, Descriptions, Tag, Space, Divider } from 'antd';
+import { Card, Typography, Button, Descriptions, Tag, Space, Divider } from 'antd';
 import { ArrowLeftOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -6,6 +6,7 @@ import { useKnowledgeItems } from '../hooks/useKnowledge';
 import { useDeleteKnowledgeItem } from '../hooks/useKnowledge';
 import KnowledgeForm from '../components/entities/forms/KnowledgeForm';
 import dayjs from 'dayjs';
+import { AppEmpty, AppLoading } from '../components/feedback/AppFeedback';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -19,20 +20,15 @@ export default function KnowledgeDetailPage() {
   const item = items?.find(k => k.id === id);
 
   if (isLoading) {
-    return (
-      <div className="loading-container">
-        <Spin size="large" />
-      </div>
-    );
+    return <AppLoading tip="加载 Knowledge 详情…" minHeight={260} />;
   }
 
   if (!item) {
     return (
-      <Result
-        status="404"
+      <AppEmpty
         title="Knowledge Item Not Found"
-        subTitle="The knowledge item you are looking for does not exist."
-        extra={
+        description="The knowledge item you are looking for does not exist."
+        action={
           <Button type="primary" onClick={() => navigate('/entities')}>
             Back to Entities
           </Button>

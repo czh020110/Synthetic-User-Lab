@@ -1,9 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ConfigProvider } from 'antd';
-import zhCN from 'antd/locale/zh_CN';
 import dayjs from 'dayjs';
-import 'dayjs/locale/zh-cn';
+import './i18n';
 import './styles/demo.css';
 
 import AppLayout from './components/layout/AppLayout';
@@ -19,42 +16,32 @@ import ReportPage from './pages/ReportPage';
 import SettingsPage from './pages/SettingsPage';
 import HelpPage from './pages/HelpPage';
 import NotFoundPage from './pages/NotFoundPage';
+import AppProviders from './providers/AppProviders';
 
 dayjs.locale('zh-cn');
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
-
 function App() {
   return (
-    <ConfigProvider locale={zhCN}>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route path="/" element={<DashboardPage />} />
-              <Route path="/entities" element={<EntitiesPage />} />
-              <Route path="/entities/personas/:id" element={<PersonaDetailPage />} />
-              <Route path="/entities/tasks/:id" element={<TaskDetailPage />} />
-              <Route path="/entities/knowledge/:id" element={<KnowledgeDetailPage />} />
-              <Route path="/runs/new" element={<StartRunPage />} />
-              <Route path="/runs/compare" element={<CompareReportPage />} />
-              <Route path="/runs/:runId" element={<RunDetailPage />} />
-              <Route path="/runs/:runId/report" element={<ReportPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/help" element={<HelpPage />} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </QueryClientProvider>
-    </ConfigProvider>
+    <AppProviders>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/entities" element={<EntitiesPage />} />
+            <Route path="/entities/personas/:id" element={<PersonaDetailPage />} />
+            <Route path="/entities/tasks/:id" element={<TaskDetailPage />} />
+            <Route path="/entities/knowledge/:id" element={<KnowledgeDetailPage />} />
+            <Route path="/runs/new" element={<StartRunPage />} />
+            <Route path="/runs/compare" element={<CompareReportPage />} />
+            <Route path="/runs/:runId" element={<RunDetailPage />} />
+            <Route path="/runs/:runId/report" element={<ReportPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/help" element={<HelpPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AppProviders>
   );
 }
 

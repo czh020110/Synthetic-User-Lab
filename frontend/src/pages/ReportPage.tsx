@@ -1,4 +1,4 @@
-import { Spin, Result, Button, Typography, Breadcrumb, Space } from 'antd';
+import { Button, Typography, Breadcrumb, Space } from 'antd';
 import { ArrowLeftOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useRunDetail } from '../hooks/useRunDetail';
@@ -8,6 +8,8 @@ import KeyFindings from '../components/report/KeyFindings';
 import FrictionIssues from '../components/report/FrictionIssues';
 import KeyScreenshots from '../components/report/KeyScreenshots';
 import Recommendations from '../components/report/Recommendations';
+import { AppEmpty, AppErrorState, AppLoading } from '../components/feedback/AppFeedback';
+import { getErrorMessage } from '../lib/api-error';
 
 const { Title } = Typography;
 
@@ -35,14 +37,10 @@ export default function ReportPage() {
   };
 
   if (reportQuery.isLoading) {
-    return (
-      <div className="loading-container">
-        <Spin size="large" />
-      </div>
-    );
+    return <AppLoading tip="加载报告…" minHeight={280} />;
   }
 
-  if (reportQuery.error) {
+  if (reportQuery.isError) {
     return (
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
@@ -56,10 +54,10 @@ export default function ReportPage() {
             Report
           </Title>
         </div>
-        <Result
-          status="warning"
+        <AppErrorState
           title="Report Not Available"
-          subTitle={(reportQuery.error as Error).message}
+          description={getErrorMessage(reportQuery.error, '请稍后重试')}
+          onRetry={() => reportQuery.refetch()}
         />
       </div>
     );
@@ -67,20 +65,15 @@ export default function ReportPage() {
 
   if (!report) {
     return (
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <Button
-            type="text"
-            icon={<ArrowLeftOutlined />}
-            onClick={() => navigate(`/runs/${runId}`)}
-            style={{ borderRadius: 8 }}
-          />
-          <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
-            Report
-          </Title>
-        </div>
-        <Result status="404" title="Report Not Found" />
-      </div>
+      <AppEmpty
+        title="Report Not Found"
+        description="当前运行还没有可展示的报告。"
+        action={
+          <Button type="primary" onClick={() => navigate(`/runs/${runId}`)}>
+            Back to Run Detail
+          </Button>
+        }
+      />
     );
   }
 

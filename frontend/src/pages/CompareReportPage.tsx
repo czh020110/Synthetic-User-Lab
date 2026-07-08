@@ -1,12 +1,15 @@
-import { Card, Table, Tag, Button, Typography, Spin, Alert, Statistic, Row, Col, Progress, Space } from 'antd';
+import { Card, Table, Tag, Button, Typography, Statistic, Row, Col, Progress, Space } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import * as api from '../api/runs';
-import { conclusionConfig } from '../components/shared/ConclusionBadge';
+import { conclusionConfig } from '../components/shared/badgeConfig';
 import type { RunStatusResponse } from '../types/run';
 import type { CompareItem, CompareReport, ReportConclusion } from '../types/report';
+import { AppEmpty, AppErrorState, AppLoading } from '../components/feedback/AppFeedback';
+import { getErrorMessage } from '../lib/api-error';
 
 const { Title, Text } = Typography;
 
@@ -24,6 +27,7 @@ function shouldRetryCompare(failureCount: number, error: unknown): boolean {
 export default function CompareReportPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { t } = useTranslation();
   const idsParam = searchParams.get('ids') || '';
   const runIds = idsParam ? idsParam.split(',').filter(Boolean) : [];
 
@@ -58,10 +62,15 @@ export default function CompareReportPage() {
 
   if (runIds.length < 2) {
     return (
-      <div>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/runs/new')} style={{ marginBottom: 16 }}>返回</Button>
-        <Alert type="warning" showIcon message="需要至少 2 个 run 才能生成对比报告" />
-      </div>
+      <AppEmpty
+        title={t('compare.needTwoRunsTitle')}
+        description={t('compare.needTwoRunsDescription')}
+        action={
+          <Button type="primary" onClick={() => navigate('/runs/new')}>
+            {t('compare.goStartRun')}
+          </Button>
+        }
+      />
     );
   }
 
@@ -70,12 +79,13 @@ export default function CompareReportPage() {
     const missingMsg = statuses && missingCount > 0 ? `${missingCount} 个 run 不存在或已被清除` : undefined;
     return (
       <div>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')} style={{ marginBottom: 16 }}>返回</Button>
-        <Alert
-          type="error"
-          showIcon
-          message="无法获取 run 状态"
-          description={missingMsg || (pollQuery.error as Error)?.message || '请稍后重试'}
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')} style={{ marginBottom: 16 }}>
+          {t('common.back')}
+        </Button>
+        <AppErrorState
+          title={t('compare.statusLoadFailed')}
+          description={missingMsg || getErrorMessage(pollQuery.error, t('common.retryLater'))}
+          onRetry={() => pollQuery.refetch()}
         />
       </div>
     );
@@ -86,17 +96,11 @@ export default function CompareReportPage() {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')} />
-          <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>对比报告</Title>
+          <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>{t('compare.title')}</Title>
         </div>
         <Card>
           <div style={{ textAlign: 'center', padding: 48 }}>
-            <Spin size="large" />
-            <div style={{ marginTop: 24 }}>
-              <Text style={{ fontSize: 15 }}>等待所有 run 完成…</Text>
-            </div>
-            <div style={{ marginTop: 12 }}>
-              <Text type="secondary">{doneCount} / {runIds.length} 已完成</Text>
-            </div>
+            <AppLoading tip={`${t('compare.waitingAllDone')} ${doneCount} / ${runIds.length} ${t('compare.completedCount')}`} minHeight={160} />
             <Progress
               percent={Math.round((doneCount / runIds.length) * 100)}
               style={{ maxWidth: 400, margin: '16px auto 0' }}
@@ -108,25 +112,19 @@ export default function CompareReportPage() {
   }
 
   if (compareQuery.isLoading) {
-    return (
-      <div style={{ textAlign: 'center', padding: 64 }}>
-        <Spin size="large" />
-        <div style={{ marginTop: 16 }}>
-          <Text type="secondary">生成对比报告…</Text>
-        </div>
-      </div>
-    );
+    return <AppLoading tip={t('compare.generating')} minHeight={240} />;
   }
 
   if (compareQuery.isError || !compareQuery.data) {
     return (
       <div>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')} style={{ marginBottom: 16 }}>返回</Button>
-        <Alert
-          type="error"
-          showIcon
-          message="对比报告生成失败"
-          description={(compareQuery.error as Error)?.message || '请稍后重试'}
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')} style={{ marginBottom: 16 }}>
+          {t('common.back')}
+        </Button>
+        <AppErrorState
+          title={t('compare.reportCreateFailed')}
+          description={getErrorMessage(compareQuery.error, t('common.retryLater'))}
+          onRetry={() => compareQuery.refetch()}
         />
       </div>
     );
@@ -136,42 +134,42 @@ export default function CompareReportPage() {
 
   const columns: ColumnsType<CompareItem> = [
     {
-      title: 'Persona',
+      title: t('compare.columns.persona'),
       dataIndex: 'persona',
       render: (_, item) => item.persona.name,
     },
     {
-      title: '结论',
+      title: t('compare.columns.conclusion'),
       dataIndex: 'conclusion',
       render: (c: ReportConclusion) => {
-        const cfg = conclusionConfig[c] ?? { color: 'default', label: c };
-        return <Tag color={cfg.color}>{cfg.label}</Tag>;
+        const cfg = conclusionConfig[c] ?? { color: 'default', labelKey: c };
+        return <Tag color={cfg.color}>{t(cfg.labelKey)}</Tag>;
       },
     },
     {
-      title: '结果',
+      title: t('compare.columns.result'),
       dataIndex: 'success',
-      render: (s: boolean) => (s ? <Tag color="success">成功</Tag> : <Tag color="error">失败</Tag>),
+      render: (s: boolean) => (s ? <Tag color="success">{t('compare.resultSuccess')}</Tag> : <Tag color="error">{t('compare.resultFailed')}</Tag>),
     },
     {
-      title: '步数',
+      title: t('compare.columns.steps'),
       dataIndex: 'total_steps',
       sorter: (a, b) => a.total_steps - b.total_steps,
     },
     {
-      title: '摩擦信号',
+      title: t('compare.columns.friction'),
       dataIndex: 'friction_signal_count',
       sorter: (a, b) => a.friction_signal_count - b.friction_signal_count,
     },
     {
-      title: '摘要',
+      title: t('compare.columns.summary'),
       dataIndex: 'summary',
       ellipsis: true,
     },
     {
-      title: '操作',
+      title: t('compare.columns.action'),
       render: (_, item) => (
-        <Button type="link" size="small" onClick={() => navigate(`/runs/${item.run_id}`)}>查看详情</Button>
+        <Button type="link" size="small" onClick={() => navigate(`/runs/${item.run_id}`)}>{t('compare.actionViewDetail')}</Button>
       ),
     },
   ];
@@ -181,7 +179,7 @@ export default function CompareReportPage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')} style={{ borderRadius: 8 }} />
         <Title level={1} style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)' }}>
-          跨 Persona 对比报告
+          {t('compare.title')}
         </Title>
       </div>
       <Text style={{ fontSize: 14, color: 'var(--color-text-muted)', display: 'block', marginBottom: 24 }}>
@@ -190,28 +188,28 @@ export default function CompareReportPage() {
 
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={6}>
-          <Card><Statistic title="参与 Persona" value={report.run_count} /></Card>
+          <Card><Statistic title={t('compare.participants')} value={report.run_count} /></Card>
         </Col>
         <Col span={6}>
-          <Card><Statistic title="成功" value={report.success_count} suffix={`/ ${report.run_count}`} /></Card>
+          <Card><Statistic title={t('compare.success')} value={report.success_count} suffix={`/ ${report.run_count}`} /></Card>
         </Col>
         <Col span={6}>
-          <Card><Statistic title="平均步数" value={report.avg_steps} precision={1} /></Card>
+          <Card><Statistic title={t('compare.avgSteps')} value={report.avg_steps} precision={1} /></Card>
         </Col>
         <Col span={6}>
-          <Card><Statistic title="累计摩擦信号" value={report.total_friction_signals} /></Card>
+          <Card><Statistic title={t('compare.totalFriction')} value={report.total_friction_signals} /></Card>
         </Col>
       </Row>
 
       <Card style={{ borderRadius: 12, border: '1px solid var(--color-border)' }}>
         <div style={{ marginBottom: 12 }}>
-          <Text strong>结论分布</Text>
+          <Text strong>{t('compare.distribution')}</Text>
           <Space style={{ marginLeft: 12 }}>
             {Object.entries(report.conclusion_distribution).map(([k, v]) => {
-              const cfg = conclusionConfig[k as ReportConclusion] ?? { color: 'default', label: k };
+              const cfg = conclusionConfig[k as ReportConclusion] ?? { color: 'default', labelKey: k };
               return (
                 <Tag key={k} color={cfg.color}>
-                  {cfg.label}: {v}
+                  {t(cfg.labelKey)}: {v}
                 </Tag>
               );
             })}

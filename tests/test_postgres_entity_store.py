@@ -6,6 +6,7 @@ import pytest
 
 from backend.schemas.knowledge_schemas import KnowledgeItem, KnowledgeItemUpdate
 from backend.schemas.persona_schemas import Persona, PersonaUpdate
+from backend.schemas.settings_schemas import FrontendSettings
 from backend.schemas.task_schemas import Task, TaskUpdate
 from backend.stores.postgres_entity_store import PostgresEntityStore
 
@@ -118,6 +119,26 @@ class TestPostgresEntityStoreKnowledge:
         assert updated.title == "新标题"
         assert store.delete_knowledge_item(item.id) is True
         assert store.get_knowledge_item(item.id) is None
+
+
+class TestPostgresEntityStoreFrontendSettings:
+    def test_get_defaults(self, store: PostgresEntityStore) -> None:
+        settings = store.get_frontend_settings()
+        assert settings.theme == "light"
+        assert settings.locale == "zh-CN"
+
+    def test_persistence_across_reopen(self, store: PostgresEntityStore) -> None:
+        settings = store.get_frontend_settings().model_copy(update={"theme": "dark", "default_max_steps": 26})
+        store.upsert_frontend_settings(settings)
+        store.close()
+
+        store2 = PostgresEntityStore(_postgres_test_dsn())
+        store2.initialize()
+        got = store2.get_frontend_settings()
+        assert got.theme == "dark"
+        assert got.default_max_steps == 26
+        store2.clear()
+        store2.close()
 
 
 def test_get_pool_closes_half_initialized_pool_on_wait_failure(monkeypatch: pytest.MonkeyPatch) -> None:

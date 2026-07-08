@@ -68,6 +68,24 @@ def test_start_formal_run_success():
         assert data["status"] == "queued"
 
 
+def test_start_formal_run_with_max_steps_override():
+    persona_id, task_id = _create_persona_and_task()
+    with patch("backend.api.routes.runs.run_formal_workflow", new_callable=AsyncMock):
+        resp = client.post("/api/v1/runs/start", json={
+            "persona_id": persona_id,
+            "task_id": task_id,
+            "max_steps_override": 3,
+        })
+    assert resp.status_code == 200
+    run_id = resp.json()["data"]["run_id"]
+    record = get_run_store().get_record(run_id)
+    assert record is not None
+    assert record.task.max_steps == 3
+    task = get_entity_store().get_task(task_id)
+    assert task is not None
+    assert task.max_steps == 5
+
+
 def test_get_run_status():
     persona_id, task_id = _create_persona_and_task()
     with patch("backend.api.routes.runs.run_formal_workflow", new_callable=AsyncMock):

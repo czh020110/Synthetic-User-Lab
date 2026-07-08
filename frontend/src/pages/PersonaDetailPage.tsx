@@ -1,10 +1,11 @@
-import { Card, Typography, Spin, Result, Button, Descriptions, Tag, Space, Divider } from 'antd';
+import { Card, Typography, Button, Descriptions, Tag, Space, Divider } from 'antd';
 import { ArrowLeftOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { usePersonas, useDeletePersona } from '../hooks/usePersonas';
 import PersonaForm from '../components/entities/forms/PersonaForm';
 import dayjs from 'dayjs';
+import { AppEmpty, AppLoading } from '../components/feedback/AppFeedback';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -18,20 +19,15 @@ export default function PersonaDetailPage() {
   const persona = personas?.find(p => p.id === id);
 
   if (isLoading) {
-    return (
-      <div className="loading-container">
-        <Spin size="large" />
-      </div>
-    );
+    return <AppLoading tip="加载 Persona 详情…" minHeight={260} />;
   }
 
   if (!persona) {
     return (
-      <Result
-        status="404"
+      <AppEmpty
         title="Persona Not Found"
-        subTitle="The persona you are looking for does not exist."
-        extra={
+        description="The persona you are looking for does not exist."
+        action={
           <Button type="primary" onClick={() => navigate('/entities')}>
             Back to Entities
           </Button>

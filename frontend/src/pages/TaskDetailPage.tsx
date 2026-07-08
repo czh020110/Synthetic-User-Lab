@@ -1,4 +1,4 @@
-import { Card, Typography, Spin, Result, Button, Descriptions, Tag, Space, Divider } from 'antd';
+import { Card, Typography, Button, Descriptions, Tag, Space, Divider } from 'antd';
 import { ArrowLeftOutlined, EditOutlined, DeleteOutlined, RocketOutlined, LinkOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -6,6 +6,7 @@ import { useTasks } from '../hooks/useTasks';
 import { useDeleteTask } from '../hooks/useTasks';
 import TaskForm from '../components/entities/forms/TaskForm';
 import dayjs from 'dayjs';
+import { AppEmpty, AppLoading } from '../components/feedback/AppFeedback';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -19,20 +20,15 @@ export default function TaskDetailPage() {
   const task = tasks?.find(t => t.id === id);
 
   if (isLoading) {
-    return (
-      <div className="loading-container">
-        <Spin size="large" />
-      </div>
-    );
+    return <AppLoading tip="加载 Task 详情…" minHeight={260} />;
   }
 
   if (!task) {
     return (
-      <Result
-        status="404"
+      <AppEmpty
         title="Task Not Found"
-        subTitle="The task you are looking for does not exist."
-        extra={
+        description="The task you are looking for does not exist."
+        action={
           <Button type="primary" onClick={() => navigate('/entities')}>
             Back to Entities
           </Button>

@@ -31,6 +31,22 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+body.theme-dark {
+  --color-primary: #5aa0ff;
+  --color-primary-hover: #87b8ff;
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-error: #fb7185;
+  --color-bg: #0f172a;
+  --color-card: #111827;
+  --color-border: #243043;
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #94a3b8;
+  --color-sidebar: #0b1220;
+  --color-sidebar-hover: #162033;
+}
+
 /* ===== Layout ===== */
 .app-layout {
   min-height: 100vh;
@@ -84,6 +100,66 @@ body {
   padding: 32px;
   max-width: var(--content-max-width);
   margin: 0 auto;
+}
+
+/* ===== Shared feedback ===== */
+.app-feedback-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  text-align: center;
+  padding: 32px 24px;
+  box-sizing: border-box;
+}
+
+.app-feedback-title {
+  margin: 0 !important;
+  color: var(--color-text-primary) !important;
+}
+
+.app-feedback-description {
+  max-width: 560px;
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+}
+
+.app-feedback-action {
+  margin-top: 8px;
+}
+
+.app-feedback-loading .ant-skeleton {
+  width: 100%;
+}
+
+.app-page-skeleton {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-page-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.app-page-skeleton-card {
+  background: var(--color-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+  padding: 20px 24px;
+}
+
+.app-error-boundary {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--color-bg);
 }
 
 /* ===== Page Header ===== */

@@ -75,6 +75,14 @@ async def shutdown_background_tasks() -> None:
     await asyncio.sleep(0)
 
 
+def _resolve_runtime_task(task: Task, max_steps_override: int | None) -> Task:
+    """按请求覆盖运行时 task 配置，不回写实体层模板。"""
+
+    if max_steps_override is None or max_steps_override == task.max_steps:
+        return task
+    return task.model_copy(update={"max_steps": max_steps_override})
+
+
 def _create_and_launch_run(
     persona: Persona,
     task: Task,
@@ -118,10 +126,11 @@ async def start_formal_run(request: Request, payload: FormalRunRequest) -> ApiRe
     task = entity_store.get_task(payload.task_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task not found: {payload.task_id}")
+    runtime_task = _resolve_runtime_task(task, payload.max_steps_override)
 
     app_base_url = str(request.base_url).rstrip("/")
     run_request = RunRequest(run_name=payload.run_name, headless=payload.headless)
-    run_id = _create_and_launch_run(persona, task, run_request, app_base_url)
+    run_id = _create_and_launch_run(persona, runtime_task, run_request, app_base_url)
     return ApiResponse(data={"run_id": run_id, "status": "queued"})
 
 
@@ -134,6 +143,7 @@ async def start_batch_run(request: Request, payload: BatchRunRequest) -> ApiResp
     task = entity_store.get_task(payload.task_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task not found: {payload.task_id}")
+    runtime_task = _resolve_runtime_task(task, payload.max_steps_override)
 
     # 去重，避免同一 persona 被重复发起 run 导致对比报告失真
     persona_ids = list(dict.fromkeys(payload.persona_ids))
@@ -147,7 +157,7 @@ async def start_batch_run(request: Request, payload: BatchRunRequest) -> ApiResp
     app_base_url = str(request.base_url).rstrip("/")
     run_request = RunRequest(run_name=payload.run_name, headless=payload.headless)
     run_ids = [
-        _create_and_launch_run(persona, task, run_request, app_base_url) for persona in personas
+        _create_and_launch_run(persona, runtime_task, run_request, app_base_url) for persona in personas
     ]
     return ApiResponse(data=BatchRunResponse(run_ids=run_ids, task_id=payload.task_id))
 

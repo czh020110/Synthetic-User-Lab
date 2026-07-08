@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import * as api from '../api/runs';
+import { hasStatus } from '../lib/api-error';
 
 export function useRunReportMarkdown(runId: string, isDemo?: boolean) {
   return useQuery({
@@ -10,8 +11,8 @@ export function useRunReportMarkdown(runId: string, isDemo?: boolean) {
       }
       try {
         return await api.getRunReportMarkdown(runId);
-      } catch (err: any) {
-        if (err?.response?.status === 404) {
+      } catch (err: unknown) {
+        if (hasStatus(err, 404)) {
           return api.getDemoRunReportMarkdown(runId);
         }
         throw err;

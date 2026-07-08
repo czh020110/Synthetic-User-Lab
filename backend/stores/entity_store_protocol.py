@@ -8,6 +8,7 @@ from typing import Protocol, runtime_checkable
 
 from backend.schemas.knowledge_schemas import KnowledgeItem, KnowledgeItemUpdate
 from backend.schemas.persona_schemas import Persona, PersonaUpdate
+from backend.schemas.settings_schemas import FrontendSettings
 from backend.schemas.task_schemas import Task, TaskUpdate
 
 
@@ -82,6 +83,16 @@ class EntityStore(Protocol):
 
     def delete_knowledge_item(self, item_id: str) -> bool:
         """删除指定知识条目，返回是否成功删除。"""
+        ...
+
+    # ============================ FrontendSettings ============================ #
+
+    def get_frontend_settings(self) -> FrontendSettings:
+        """返回前端设置；若未显式保存则返回默认值。"""
+        ...
+
+    def upsert_frontend_settings(self, settings: FrontendSettings) -> FrontendSettings:
+        """写入并返回当前前端设置。"""
         ...
 
     # ============================ 通用 ============================ #

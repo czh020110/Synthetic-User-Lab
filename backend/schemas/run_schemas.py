@@ -281,6 +281,7 @@ class FormalRunRequest(BaseModel):
     task_id: str = Field(..., min_length=1)
     run_name: str = Field(default="run")
     headless: bool | None = None
+    max_steps_override: int | None = Field(default=None, ge=1, le=50)
 
 # ========= Demo require========== #
 
@@ -452,6 +453,7 @@ class BatchRunRequest(BaseModel):
     persona_ids: list[str] = Field(..., min_length=1)
     run_name: str = Field(default="run")
     headless: bool | None = None
+    max_steps_override: int | None = Field(default=None, ge=1, le=50)
 
 
 class BatchRunResponse(BaseModel):

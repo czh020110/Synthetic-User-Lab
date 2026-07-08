@@ -18,6 +18,7 @@ export interface FormalRunRequest {
   task_id: string;
   run_name?: string;
   headless?: boolean | null;
+  max_steps_override?: number | null;
 }
 
 export interface RunRequest {
@@ -47,6 +48,7 @@ export interface BatchRunRequest {
   persona_ids: string[];
   run_name?: string;
   headless?: boolean | null;
+  max_steps_override?: number | null;
 }
 
 export interface BatchRunResponse {
