@@ -80,9 +80,7 @@ class AcceptanceReport:
     started_at: str
     finished_at: str = ""
     results: list[CheckResult] = field(default_factory=list)
-    demo_run_id: str | None = None
     formal_run_id: str | None = None
-    demo_markdown: str | None = None
     formal_markdown: str | None = None
 
     @property
@@ -197,29 +195,6 @@ def _build_scripted_steps(run_id: str, success: bool) -> list[StepLog]:
     return [step1, step2]
 
 
-async def _scripted_demo_workflow(run_id: str, **_kwargs) -> None:
-    """受控 demo workflow：写入真实步骤证据并完成 run。"""
-
-    from backend.analysis.report_builder import build_run_report_async
-
-    run_store = get_run_store()
-    record = run_store.get_record(run_id)
-    if record is None:
-        record = RunRecord(
-            run_id=run_id,
-            request=RunRequest(run_name="acceptance-demo"),
-            persona=Persona(name="验收 demo persona"),
-            task=Task(start_url=_DEMO_START_URL),
-        )
-        run_store.create_run(record)
-    run_store.mark_running(run_id)
-    steps = _build_scripted_steps(run_id, success=True)
-    for step in steps:
-        run_store.add_step(run_id, step)
-    report = await build_run_report_async(record, steps)
-    run_store.complete_run(run_id, report)
-
-
 async def _scripted_formal_workflow(run_id: str, **_kwargs) -> None:
     """受控 formal workflow：写入真实步骤证据并完成 run。"""
 
@@ -259,56 +234,6 @@ def _seed_mvp_samples() -> tuple[str, str]:
     task_resp = client.post("/api/v1/tasks/", json=task_payload)
     assert task_resp.status_code == 200, task_resp.text
     return persona_resp.json()["data"]["id"], task_resp.json()["data"]["id"]
-
-
-def check_demo_run_path(report: AcceptanceReport) -> None:
-    """验收路径 1：Demo Run 闭环。"""
-
-    print("\n[路径 1] Demo Run 端到端闭环")
-    with patch("backend.api.routes.demo_runs.run_demo_workflow", new=_scripted_demo_workflow):
-        start_resp = client.post("/api/v1/runs/demo/start", json={"run_name": "acceptance-demo", "headless": True})
-    record(report, "POST /runs/demo/start 返回 200 + run_id", start_resp.status_code == 200)
-    start_data = start_resp.json().get("data", {})
-    run_id = start_data.get("run_id")
-    report.demo_run_id = run_id
-    record(report, "启动状态为 queued", start_data.get("status") == "queued", f"status={start_data.get('status')}")
-
-    if run_id is None:
-        record(report, "获取 demo run_id", False, "启动响应缺失 run_id")
-        return
-
-    # 受控 workflow 在后台 task 中执行；TestClient 同步上下文需等待其完成
-    _drain_demo_background_tasks()
-
-    status_resp = client.get(f"/api/v1/runs/demo/{run_id}")
-    status_data = status_resp.json().get("data", {})
-    record(report, "GET status 返回 200", status_resp.status_code == 200)
-    record(report, "最终状态为 succeeded", status_data.get("status") == "succeeded", f"status={status_data.get('status')}")
-
-    steps_resp = client.get(f"/api/v1/runs/demo/{run_id}/steps")
-    steps_data = steps_resp.json().get("data", [])
-    record(report, "GET steps 返回 200", steps_resp.status_code == 200)
-    record(report, "steps 包含 2 条步骤日志", len(steps_data) == 2, f"len={len(steps_data)}")
-    if steps_data:
-        record(
-            report,
-            "步骤日志含动作前/后截图路径",
-            steps_data[0]["before_page_state"]["screenshot_path"].endswith("step-1-before.png")
-            and steps_data[1]["after_page_state"]["screenshot_path"].endswith("step-2-after.png"),
-        )
-
-    report_resp = client.get(f"/api/v1/runs/demo/{run_id}/report")
-    report_data = report_resp.json().get("data", {})
-    record(report, "GET report 返回 200", report_resp.status_code == 200)
-    record(report, "报告 conclusion=keep", report_data.get("conclusion") == "keep", f"conclusion={report_data.get('conclusion')}")
-    record(report, "报告 total_steps=2", report_data.get("total_steps") == 2, f"total_steps={report_data.get('total_steps')}")
-    record(report, "报告含结构化事实 structured_facts", bool(report_data.get("structured_facts")))
-
-    md_resp = client.get(f"/api/v1/runs/demo/{run_id}/report/markdown")
-    md_text = md_resp.json().get("data", {}).get("markdown", "")
-    report.demo_markdown = md_text
-    record(report, "GET report/markdown 返回 200", md_resp.status_code == 200)
-    record(report, "Markdown 含执行摘要与步骤明细", "## 执行摘要" in md_text and "## 步骤明细" in md_text)
 
 
 def check_formal_run_path(report: AcceptanceReport) -> None:
@@ -485,16 +410,6 @@ def check_knowledge_retrieval(report: AcceptanceReport) -> None:
 
 
 # ============================ 后台任务排空 ============================ #
-
-
-def _drain_demo_background_tasks() -> None:
-    import backend.api.routes.demo_runs as demo_runs
-
-    async def _wait() -> None:
-        while demo_runs._background_tasks:
-            await asyncio.sleep(0)
-
-    asyncio.run(_wait())
 
 
 def _drain_formal_background_tasks() -> None:
@@ -773,8 +688,6 @@ def _render_acceptance_report(report: AcceptanceReport) -> str:
     lines.append(f"- **通过**: {report.passed_count}")
     lines.append(f"- **失败**: {report.failed_count}")
     lines.append(f"- **整体结论**: {'PASS' if report.all_passed else 'FAIL'}")
-    if report.demo_run_id:
-        lines.append(f"- **Demo Run ID**: {report.demo_run_id}")
     if report.formal_run_id:
         lines.append(f"- **Formal Run ID**: {report.formal_run_id}")
     lines.append("")
@@ -786,14 +699,6 @@ def _render_acceptance_report(report: AcceptanceReport) -> str:
         flag = "PASS" if r.passed else "FAIL"
         lines.append(f"| {idx} | {r.name} | {flag} |")
     lines.append("")
-
-    if report.demo_markdown:
-        lines.append("## Demo Run Markdown 报告（节选）\n")
-        lines.append("````markdown")
-        snippet = report.demo_markdown[:1500]
-        lines.append(snippet + ("\n...（已截断）" if len(report.demo_markdown) > 1500 else ""))
-        lines.append("````")
-        lines.append("")
 
     if report.formal_markdown:
         lines.append("## Formal Run Markdown 报告（节选）\n")
@@ -817,7 +722,6 @@ def run_acceptance() -> AcceptanceReport:
     print("Synthetic User Lab MVP 验收开始\n" + "=" * 50)
 
     try:
-        check_demo_run_path(report)
         check_formal_run_path(report)
         check_error_branches(report)
         check_knowledge_retrieval(report)

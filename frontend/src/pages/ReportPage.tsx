@@ -1,6 +1,6 @@
 import { Button, Typography, Breadcrumb, Space } from 'antd';
 import { ArrowLeftOutlined, DownloadOutlined } from '@ant-design/icons';
-import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { useRunDetail } from '../hooks/useRunDetail';
 import { useRunReportMarkdown } from '../hooks/useRunReportMarkdown';
 import ReportSummary from '../components/report/ReportSummary';
@@ -15,12 +15,10 @@ const { Title } = Typography;
 
 export default function ReportPage() {
   const { runId } = useParams<{ runId: string }>();
-  const [searchParams] = useSearchParams();
-  const isDemo = searchParams.get('demo') === 'true';
   const navigate = useNavigate();
 
-  const { reportQuery } = useRunDetail(runId!, isDemo || undefined);
-  const { data: markdownReport } = useRunReportMarkdown(runId!, isDemo || undefined);
+  const { reportQuery } = useRunDetail(runId!);
+  const { data: markdownReport } = useRunReportMarkdown(runId!);
   const report = reportQuery.data;
 
   const displayId = runId && runId.length > 12 ? `${runId.slice(0, 12)}…` : runId || '';

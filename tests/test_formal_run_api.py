@@ -138,11 +138,3 @@ def test_formal_run_request_validation():
     # 缺少 task_id
     resp = client.post("/api/v1/runs/start", json={"persona_id": "p1"})
     assert resp.status_code == 422
-
-
-def test_demo_run_still_works():
-    """确认 demo run API 没有被正式 run 影响到。"""
-    resp = client.post("/api/v1/runs/demo/start", json={"run_name": "test"})
-    # demo run 可能因缺少浏览器环境而失败，但 API 层应返回 200 + queued
-    assert resp.status_code == 200
-    assert resp.json()["data"]["status"] == "queued"

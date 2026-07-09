@@ -2,10 +2,10 @@ from __future__ import annotations
 
 # ============================ FastAPI 应用入口模块 ============================ #
 # 使用技术栈: Python / FastAPI
-# 模块功能: 创建应用实例、挂载 API 与 Demo 页面静态资源
+# 模块功能: 创建应用实例、挂载 API 与测试站点静态资源
 # 模块数据流: Settings -> FastAPI app -> Router / StaticFiles
 # 模块接口说明: app 为服务主入口
-# 初始化说明: lifespan 负责启动时 seed demo 实体，关闭时释放 store 连接/连接池
+# 初始化说明: lifespan 负责启动时 seed MVP 样例实体，关闭时释放 store 连接/连接池
 
 from contextlib import asynccontextmanager
 
@@ -21,28 +21,17 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动：seed demo persona/task 到 EntityStore（幂等，已存在则跳过）
-    from backend.api.routes.demo_runs import shutdown_background_tasks as shutdown_demo_background_tasks
+    # 启动：seed MVP 样例 persona/task 到 EntityStore（幂等，已存在则跳过）
     from backend.api.routes.runs import shutdown_background_tasks as shutdown_formal_background_tasks
-    from backend.graph.demo_run_graph import build_demo_persona, build_demo_task
-    from backend.stores import get_entity_store
+    from backend.fixtures.mvp_samples import seed_mvp_samples_if_absent
+    from backend.stores import _reset_entity_store, _reset_run_store, get_entity_store
 
-    entity_store = get_entity_store()
-    demo_persona = build_demo_persona()
-    if entity_store.get_persona(demo_persona.id) is None:
-        entity_store.create_persona(demo_persona)
-    demo_task = build_demo_task(str(settings.app_base_url))
-    if entity_store.get_task(demo_task.id) is None:
-        entity_store.create_task(demo_task)
+    seed_mvp_samples_if_absent(get_entity_store())
 
     yield
 
     # 关闭：先等待后台 run task 收尾，再释放数据库连接与连接池
-    await shutdown_demo_background_tasks()
     await shutdown_formal_background_tasks()
-
-    from backend.stores import _reset_entity_store, _reset_run_store
-
     _reset_run_store()
     _reset_entity_store()
 

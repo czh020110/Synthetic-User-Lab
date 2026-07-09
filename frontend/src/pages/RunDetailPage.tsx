@@ -1,6 +1,6 @@
 import { Card, Typography, Button, Badge, Space, Breadcrumb } from 'antd';
 import { FileSearchOutlined, ArrowLeftOutlined, CalendarOutlined, ReloadOutlined } from '@ant-design/icons';
-import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { useRunDetail } from '../hooks/useRunDetail';
 import StatusBadge from '../components/shared/StatusBadge';
 import StepTimeline from '../components/runs/StepTimeline';
@@ -20,11 +20,9 @@ const statusLabels: Record<RunStatus, string> = {
 
 export default function RunDetailPage() {
   const { runId } = useParams<{ runId: string }>();
-  const [searchParams] = useSearchParams();
-  const isDemo = searchParams.get('demo') === 'true';
   const navigate = useNavigate();
 
-  const { statusQuery, stepsQuery } = useRunDetail(runId!, isDemo || undefined);
+  const { statusQuery, stepsQuery } = useRunDetail(runId!);
 
   const status = statusQuery.data;
   const steps = stepsQuery.data;
@@ -96,7 +94,7 @@ export default function RunDetailPage() {
           </Title>
         </div>
         <Text className="page-subtitle">
-          {isDemo ? 'Demo Run' : 'Formal Run'} — {statusLabels[status.status]}
+          Formal Run — {statusLabels[status.status]}
         </Text>
       </div>
 

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '../api/runs';
-import type { BatchRunRequest, FormalRunRequest, RunRequest } from '../types/run';
+import type { BatchRunRequest, FormalRunRequest } from '../types/run';
 
 export function useRuns() {
   return useQuery({
@@ -22,14 +22,6 @@ export function useStartBatchRun() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: BatchRunRequest) => api.startBatchRun(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['runs'] }),
-  });
-}
-
-export function useStartDemoRun() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data?: RunRequest) => api.startDemoRun(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['runs'] }),
   });
 }

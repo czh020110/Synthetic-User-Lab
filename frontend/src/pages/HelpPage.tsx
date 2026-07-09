@@ -14,7 +14,7 @@ export default function HelpPage() {
     },
     {
       title: 'Start a Run',
-      description: 'Use the "Start Formal Run" button to launch a run with a Persona and Task.',
+      description: 'Use the "Start Run" button to launch a run with one or more Personas and a Task.',
     },
     {
       title: 'Monitor Progress',
@@ -59,12 +59,11 @@ export default function HelpPage() {
     },
     {
       key: '4',
-      label: 'What is the difference between Demo Run and Formal Run?',
+      label: 'Can I compare multiple Personas on the same Task?',
       children: (
         <Paragraph>
-          <Text strong>Demo Run</Text> uses preset Persona and Task for quick testing.{' '}
-          <Text strong>Formal Run</Text> requires explicit Persona and Task selection and provides
-          more detailed configuration options.
+          Yes. On the Start Run page, select multiple Personas to launch a batch run. Once all runs finish,
+          a cross-persona comparison report highlights differences in success rate, conclusion, step count and friction signals.
         </Paragraph>
       ),
     },
@@ -92,8 +91,8 @@ export default function HelpPage() {
 
   const keyFeatures = [
     { icon: <TeamOutlined />, title: 'Entity Management', description: 'Create and manage Personas, Tasks, and Knowledge items' },
-    { icon: <PlayCircleOutlined />, title: 'Demo Run', description: 'Quick test run with preset configuration' },
-    { icon: <RocketOutlined />, title: 'Formal Run', description: 'Full-featured run with custom Persona and Task' },
+    { icon: <RocketOutlined />, title: 'Start Run', description: 'Launch a run with custom Persona(s) and Task' },
+    { icon: <PlayCircleOutlined />, title: 'Multi-Persona Compare', description: 'Batch run and cross-persona friction comparison' },
     { icon: <FileSearchOutlined />, title: 'Detailed Reports', description: 'Comprehensive reports with findings and recommendations' },
   ];
 

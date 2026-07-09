@@ -40,7 +40,9 @@ def test_mvp_tasks_have_required_fields():
         assert task_create.max_steps >= 1
         assert len(task_create.allowed_actions) > 0
         assert task_create.risk_level in ["low", "medium", "high"]
-        assert task_create.destructive_action_allowed is False
+        # ShopLab 是自托管测试站点，购买/支付/结算是任务本身要测的流程，
+        # 护栏会误拦这些关键词，故 MVP task 放行高风险动作。
+        assert task_create.destructive_action_allowed is True
 
 
 def test_mvp_personas_diversity():

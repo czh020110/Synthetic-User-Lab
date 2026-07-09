@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from backend.core.config import get_settings
 from backend.schemas.persona_schemas import Persona, PersonaCreate
 from backend.schemas.task_schemas import Task, TaskCreate
+
+if TYPE_CHECKING:
+    from backend.stores.entity_store_protocol import EntityStore
 
 # 测试站点 ShopLab 的 base_url，运行时解析为 app_base_url + /site。
 _TEST_SITE_BASE = str(get_settings().app_base_url).rstrip("/") + "/site"
@@ -72,7 +77,10 @@ TASK_BROWSE_PURCHASE = TaskCreate(
         "scroll", "press", "select",
     ],
     risk_level="medium",
-    destructive_action_allowed=False,
+    # ShopLab 是自托管测试站点，购买/支付/结算是任务本身要测的流程；
+    # 护栏的 DESTRUCTIVE_BUTTON_PATTERNS 会命中"购买/支付/结算"关键词，
+    # 故此处放行，让 action_guard 的"按 task 开关"设计真正生效。
+    destructive_action_allowed=True,
 )
 
 TASK_USE_COUPON = TaskCreate(
@@ -90,7 +98,7 @@ TASK_USE_COUPON = TaskCreate(
         "scroll", "press",
     ],
     risk_level="low",
-    destructive_action_allowed=False,
+    destructive_action_allowed=True,
 )
 
 TASK_CHECKOUT_FORM = TaskCreate(
@@ -108,7 +116,7 @@ TASK_CHECKOUT_FORM = TaskCreate(
         "scroll", "press", "select",
     ],
     risk_level="low",
-    destructive_action_allowed=False,
+    destructive_action_allowed=True,
 )
 
 # ============================ 样例数据集合 ============================ #
@@ -125,3 +133,30 @@ def get_mvp_personas() -> list[PersonaCreate]:
 def get_mvp_tasks() -> list[TaskCreate]:
     """获取 MVP 验收样例 task 列表。start_url 已解析为指向测试站点 ShopLab 的绝对地址。"""
     return MVP_TASKS
+
+
+def seed_mvp_samples_if_absent(entity_store: EntityStore) -> tuple[int, int]:
+    """幂等 seed MVP 样例 persona/task 到 entity_store，返回 (新建 persona 数, 新建 task 数)。
+
+    PersonaCreate/TaskCreate 无 id，无法按 id 判断是否已存在，故用 list + name 匹配做幂等。
+    被 main.py lifespan（启动自动 seed）与 scripts/seed_mvp_samples.py（手动 re-seed）共用。
+    """
+
+    existing_persona_names = {p.name for p in entity_store.list_personas()}
+    existing_task_names = {t.name for t in entity_store.list_tasks()}
+
+    created_personas = 0
+    for persona_create in get_mvp_personas():
+        if persona_create.name in existing_persona_names:
+            continue
+        entity_store.create_persona(Persona.model_validate(persona_create.model_dump()))
+        created_personas += 1
+
+    created_tasks = 0
+    for task_create in get_mvp_tasks():
+        if task_create.name in existing_task_names:
+            continue
+        entity_store.create_task(Task.model_validate(task_create.model_dump()))
+        created_tasks += 1
+
+    return created_personas, created_tasks

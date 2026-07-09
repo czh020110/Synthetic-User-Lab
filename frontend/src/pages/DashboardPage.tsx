@@ -1,8 +1,8 @@
-import { Button, Table, message, Typography, Segmented, Space } from 'antd';
-import { PlayCircleOutlined, ArrowRightOutlined, RocketOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Button, Table, Typography, Segmented, Space } from 'antd';
+import { PlayCircleOutlined, ArrowRightOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useRuns, useStartDemoRun } from '../hooks/useRuns';
+import { useRuns } from '../hooks/useRuns';
 import StatusBadge from '../components/shared/StatusBadge';
 import dayjs from 'dayjs';
 
@@ -11,18 +11,7 @@ const { Title, Text } = Typography;
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { data: runs, isLoading } = useRuns();
-  const startDemo = useStartDemoRun();
   const [filter, setFilter] = useState<'all' | 'running' | 'succeeded' | 'failed'>('all');
-
-  const handleStartDemo = async () => {
-    try {
-      const result = await startDemo.mutateAsync({ run_name: 'demo' });
-      message.success('Demo Run 已启动');
-      navigate(`/runs/${result.run_id}?demo=true`);
-    } catch (err) {
-      message.error(`启动失败: ${(err as Error).message}`);
-    }
-  };
 
   const allRuns = runs ?? [];
   const filteredRuns = filter === 'all' ? allRuns : allRuns.filter(r => r.status === filter);
@@ -136,9 +125,9 @@ export default function DashboardPage() {
       {/* Quick Start */}
       <div className="quick-start-card" style={{ marginBottom: 32 }}>
         <div className="quick-start-content">
-          <h3>Launch Demo Run</h3>
+          <h3>Start Run</h3>
           <p>
-            Start a demo run with preset Persona and Task to experience the full automated testing workflow.
+            Choose persona(s) and a task to launch an automated UX testing run, then review steps, screenshots and the friction report.
           </p>
         </div>
         <div className="quick-start-action">
@@ -146,26 +135,16 @@ export default function DashboardPage() {
             type="primary"
             size="large"
             icon={<PlayCircleOutlined />}
-            loading={startDemo.isPending}
-            onClick={handleStartDemo}
+            onClick={() => navigate('/runs/new')}
             style={{ height: 36, fontWeight: 600 }}
           >
-            Launch Demo Run
+            Start Run
           </Button>
         </div>
       </div>
 
       {/* Quick Actions */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 32, flexWrap: 'wrap' }}>
-        <Button
-          type="primary"
-          icon={<RocketOutlined />}
-          onClick={() => navigate('/runs/new')}
-          size="large"
-          style={{ height: 36, fontWeight: 600 }}
-        >
-          Start Formal Run
-        </Button>
         <Button
           icon={<ReloadOutlined />}
           onClick={() => window.location.reload()}
@@ -208,7 +187,7 @@ export default function DashboardPage() {
           <div className="empty-state" style={{ padding: 48 }}>
             <div className="empty-icon">🚀</div>
             <h4>No runs yet</h4>
-            <p>Launch your first demo run above to get started.</p>
+            <p>Launch your first run above to get started.</p>
           </div>
         ) : (
           <div className="demo-table">

@@ -42,6 +42,7 @@ screenshots/
 # Runtime / local data
 .env
 .env.*
+!.env.example
 *.sqlite3
 data/
 
