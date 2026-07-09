@@ -7,7 +7,9 @@ from __future__ import annotations
 import copy
 
 from backend.core.utils import utc_now
+from backend.schemas.guard_config_schemas import GUARD_CONFIG_KEY, GuardConfig
 from backend.schemas.knowledge_schemas import KnowledgeItem, KnowledgeItemUpdate
+from backend.schemas.model_preset_schemas import ModelPreset, ModelPresetUpdate
 from backend.schemas.persona_schemas import Persona, PersonaUpdate
 from backend.schemas.settings_schemas import FRONTEND_SETTINGS_KEY, FrontendSettings
 from backend.schemas.task_schemas import Task, TaskUpdate
@@ -21,6 +23,8 @@ class InMemoryEntityStore:
         self._tasks: dict[str, Task] = {}
         self._knowledge_items: dict[str, KnowledgeItem] = {}
         self._frontend_settings = FrontendSettings(settings_key=FRONTEND_SETTINGS_KEY)
+        self._model_presets: dict[str, ModelPreset] = {}
+        self._guard_config = GuardConfig(settings_key=GUARD_CONFIG_KEY)
 
     # ============================ Persona CRUD ============================ #
 
@@ -39,7 +43,8 @@ class InMemoryEntityStore:
         p = self._personas.get(persona_id)
         if p is None:
             return None
-        update_data = updates.model_dump(exclude_none=True)
+        # 用 exclude_unset 而非 exclude_none：model_preset_id 是可空字段，显式传 null 才能清空
+        update_data = updates.model_dump(exclude_unset=True)
         updated = p.model_copy(update=update_data)
         updated.updated_at = utc_now()
         self._personas[persona_id] = updated.model_copy(deep=True)
@@ -121,10 +126,68 @@ class InMemoryEntityStore:
         self._frontend_settings = settings.model_copy(deep=True)
         return self._frontend_settings.model_copy(deep=True)
 
+    # ============================ ModelPreset CRUD ============================ #
+
+    def create_model_preset(self, preset: ModelPreset) -> ModelPreset:
+        # 已存在则不覆盖，与 sqlite/pg ON CONFLICT 行为一致
+        if preset.id in self._model_presets:
+            return self._model_presets[preset.id].model_copy(deep=True)
+        self._model_presets[preset.id] = preset.model_copy(deep=True)
+        if preset.is_default:
+            for other in self._model_presets.values():
+                if other.id != preset.id and other.is_default:
+                    other.is_default = False
+                    other.updated_at = utc_now()
+        return self._model_presets[preset.id].model_copy(deep=True)
+
+    def get_model_preset(self, preset_id: str) -> ModelPreset | None:
+        p = self._model_presets.get(preset_id)
+        return p.model_copy(deep=True) if p else None
+
+    def list_model_presets(self) -> list[ModelPreset]:
+        return [p.model_copy(deep=True) for p in self._model_presets.values()]
+
+    def update_model_preset(self, preset_id: str, updates: ModelPresetUpdate) -> ModelPreset | None:
+        p = self._model_presets.get(preset_id)
+        if p is None:
+            return None
+        updated = p.model_copy(update=updates.model_dump(exclude_none=True))
+        updated.updated_at = utc_now()
+        self._model_presets[preset_id] = updated.model_copy(deep=True)
+        return updated.model_copy(deep=True)
+
+    def delete_model_preset(self, preset_id: str) -> bool:
+        if preset_id not in self._model_presets:
+            return False
+        del self._model_presets[preset_id]
+        return True
+
+    def set_default_model_preset(self, preset_id: str) -> ModelPreset | None:
+        p = self._model_presets.get(preset_id)
+        if p is None:
+            return None
+        for other in self._model_presets.values():
+            new_default = other.id == preset_id
+            if other.is_default != new_default:
+                other.is_default = new_default
+                other.updated_at = utc_now()
+        return self._model_presets[preset_id].model_copy(deep=True)
+
+    # ============================ GuardConfig ============================ #
+
+    def get_guard_config(self) -> GuardConfig:
+        return self._guard_config.model_copy(deep=True)
+
+    def upsert_guard_config(self, config: GuardConfig) -> GuardConfig:
+        self._guard_config = config.model_copy(deep=True)
+        return self._guard_config.model_copy(deep=True)
+
     # ============================ 通用 ============================ #
 
     def clear(self) -> None:
         self._personas.clear()
         self._tasks.clear()
         self._knowledge_items.clear()
+        self._model_presets.clear()
         self._frontend_settings = FrontendSettings(settings_key=FRONTEND_SETTINGS_KEY)
+        self._guard_config = GuardConfig(settings_key=GUARD_CONFIG_KEY)

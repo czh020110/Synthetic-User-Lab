@@ -26,6 +26,7 @@ class Persona(BaseModel):
     skill_level: SkillLevel = "newbie"
     patience_level: PatienceLevel = "medium"
     risk_preference: RiskPreference = "low"
+    model_preset_id: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -38,6 +39,7 @@ class PersonaCreate(BaseModel):
     skill_level: SkillLevel = Field(default="newbie")
     patience_level: PatienceLevel = Field(default="medium")
     risk_preference: RiskPreference = Field(default="low")
+    model_preset_id: str | None = None
 
 
 class PersonaUpdate(BaseModel):
@@ -48,3 +50,4 @@ class PersonaUpdate(BaseModel):
     skill_level: SkillLevel | None = None
     patience_level: PatienceLevel | None = None
     risk_preference: RiskPreference | None = None
+    model_preset_id: str | None = None

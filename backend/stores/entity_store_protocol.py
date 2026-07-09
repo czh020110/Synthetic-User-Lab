@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from backend.schemas.guard_config_schemas import GuardConfig, GuardConfigUpdate
 from backend.schemas.knowledge_schemas import KnowledgeItem, KnowledgeItemUpdate
+from backend.schemas.model_preset_schemas import ModelPreset, ModelPresetUpdate
 from backend.schemas.persona_schemas import Persona, PersonaUpdate
 from backend.schemas.settings_schemas import FrontendSettings
 from backend.schemas.task_schemas import Task, TaskUpdate
@@ -93,6 +95,42 @@ class EntityStore(Protocol):
 
     def upsert_frontend_settings(self, settings: FrontendSettings) -> FrontendSettings:
         """写入并返回当前前端设置。"""
+        ...
+
+    # ============================ ModelPreset CRUD ============================ #
+
+    def create_model_preset(self, preset: ModelPreset) -> ModelPreset:
+        """创建新的模型预设。若 preset.is_default=True，先把其他预设默认标记清空。"""
+        ...
+
+    def get_model_preset(self, preset_id: str) -> ModelPreset | None:
+        """返回指定模型预设。"""
+        ...
+
+    def list_model_presets(self) -> list[ModelPreset]:
+        """返回所有模型预设列表。"""
+        ...
+
+    def update_model_preset(self, preset_id: str, updates: ModelPresetUpdate) -> ModelPreset | None:
+        """更新指定模型预设，返回更新后的对象或 None（不存在时）。不处理 is_default 切换。"""
+        ...
+
+    def delete_model_preset(self, preset_id: str) -> bool:
+        """删除指定模型预设，返回是否成功删除。"""
+        ...
+
+    def set_default_model_preset(self, preset_id: str) -> ModelPreset | None:
+        """把指定预设设为默认（互斥：其余预设 is_default 置 False），返回更新后的预设或 None。"""
+        ...
+
+    # ============================ GuardConfig ============================ #
+
+    def get_guard_config(self) -> GuardConfig:
+        """返回护栏关键词库；若未显式保存则返回默认词库。"""
+        ...
+
+    def upsert_guard_config(self, config: GuardConfig) -> GuardConfig:
+        """写入并返回当前护栏关键词库。"""
         ...
 
     # ============================ 通用 ============================ #

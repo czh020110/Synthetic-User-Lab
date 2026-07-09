@@ -90,3 +90,22 @@ def test_delete_persona():
 def test_delete_persona_not_found():
     resp = client.delete("/api/v1/personas/nonexistent")
     assert resp.status_code == 404
+
+
+def test_update_persona_clears_model_preset_id():
+    """更新时显式传 model_preset_id=null 应清空（验证 exclude_unset 让可空字段可清空）。"""
+    preset = client.post(
+        "/api/v1/system/model-presets",
+        json={"name": "P", "provider": "openai", "model_name": "gpt-4o"},
+    ).json()["data"]
+    create_resp = client.post(
+        "/api/v1/personas/",
+        json={"name": "x", "model_preset_id": preset["id"]},
+    )
+    assert create_resp.json()["data"]["model_preset_id"] == preset["id"]
+    persona_id = create_resp.json()["data"]["id"]
+
+    # 显式传 null 清空（前端 ?? null 会发 null；后端 exclude_unset 保留显式 null）
+    resp = client.put(f"/api/v1/personas/{persona_id}", json={"model_preset_id": None})
+    assert resp.status_code == 200
+    assert resp.json()["data"]["model_preset_id"] is None

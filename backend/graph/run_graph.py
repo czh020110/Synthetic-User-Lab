@@ -20,6 +20,7 @@ from pydantic import BaseModel, SecretStr, ValidationError
 
 from backend.analysis.report_builder import build_run_report_async, build_run_report_without_llm
 from backend.analysis.validator import validate_progress
+from backend.ai_api.model_resolver import RuntimeModelConfig, resolve_runtime_model
 from backend.core.config import get_settings
 from backend.execution.observer import observe_page
 from backend.execution.playwright_adapter import TERMINAL_ACTIONS, close_browser_session, create_browser_session, execute_action
@@ -149,29 +150,28 @@ validate_input_prompt = ChatPromptTemplate.from_messages([("user", validate_inpu
 wait_observe_system_prompt = ChatPromptTemplate.from_template(wait_observe)
 wait_observe_input_prompt = ChatPromptTemplate.from_messages([("user", wait_observe_input)])
 
-def _create_chat_model(model_name: str) -> Any:
-    settings = get_settings()
-    if not settings.api_key:
+def _create_chat_model(model_name: str, cfg: RuntimeModelConfig) -> Any:
+    if not cfg.api_key:
         raise ValueError("API key is required for the configured model provider.")
     if not model_name:
         raise ValueError("Model name is required for the configured model provider.")
 
-    if settings.model_provider == "openai":
+    if cfg.provider == "openai":
         from langchain_openai import ChatOpenAI
 
         return ChatOpenAI(
             model=model_name,
-            api_key=SecretStr(settings.api_key),
-            base_url=settings.base_url,
+            api_key=SecretStr(cfg.api_key),
+            base_url=cfg.base_url or None,
         )
-    if settings.model_provider == "dashscope":
+    if cfg.provider == "dashscope":
         from langchain_community.chat_models.tongyi import ChatTongyi
 
         return ChatTongyi(
             model=model_name,
-            api_key=SecretStr(settings.api_key),
+            api_key=SecretStr(cfg.api_key),
         )
-    raise ValueError(f"Unsupported model provider: {settings.model_provider}")
+    raise ValueError(f"Unsupported model provider: {cfg.provider}")
 
 
 def create_run_agents(persona: Persona, task: Task) -> tuple[Any, Any, Any]:
@@ -179,10 +179,14 @@ def create_run_agents(persona: Persona, task: Task) -> tuple[Any, Any, Any]:
 
     返回的 agent 使用 with_structured_output(method='json_mode', include_raw=True)，
     ainvoke 返回 {"raw": AIMessage, "parsed": Model|None, "parsing_error": Exception|None}。
+
+    模型配置按 persona.model_preset_id -> 默认预设 -> env 解析（见 model_resolver）。
     """
-    settings = get_settings()
-    model = _create_chat_model(settings.model_name)
-    wait_model = _create_chat_model(settings.fast_model_name or settings.model_name)
+    from backend.stores import get_entity_store
+
+    cfg = resolve_runtime_model(persona, get_entity_store())
+    model = _create_chat_model(cfg.model_name, cfg)
+    wait_model = _create_chat_model(cfg.fast_model_name or cfg.model_name, cfg)
     decide_structured = model.with_structured_output(ActionInput, method="json_mode", include_raw=True)
     validate_structured = model.with_structured_output(ValidationResult, method="json_mode", include_raw=True)
     wait_structured = wait_model.with_structured_output(WaitObservationDecision, method="json_mode", include_raw=True)

@@ -11,7 +11,9 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
 from backend.core.utils import utc_now
+from backend.schemas.guard_config_schemas import GUARD_CONFIG_KEY, GuardConfig
 from backend.schemas.knowledge_schemas import KnowledgeItem, KnowledgeItemUpdate
+from backend.schemas.model_preset_schemas import ModelPreset, ModelPresetUpdate
 from backend.schemas.persona_schemas import Persona, PersonaUpdate
 from backend.schemas.settings_schemas import FRONTEND_SETTINGS_KEY, FrontendSettings
 from backend.schemas.task_schemas import Task, TaskUpdate
@@ -47,6 +49,23 @@ SCHEMA_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_knowledge_items_source_type ON knowledge_items(source_type)",
     """
     CREATE TABLE IF NOT EXISTS frontend_settings (
+        settings_key   TEXT PRIMARY KEY,
+        settings_json  JSONB NOT NULL,
+        created_at     TIMESTAMPTZ NOT NULL,
+        updated_at     TIMESTAMPTZ NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS model_presets (
+        preset_id   TEXT PRIMARY KEY,
+        preset_json JSONB NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL,
+        updated_at  TIMESTAMPTZ NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_model_presets_created_at ON model_presets(created_at)",
+    """
+    CREATE TABLE IF NOT EXISTS guard_config (
         settings_key   TEXT PRIMARY KEY,
         settings_json  JSONB NOT NULL,
         created_at     TIMESTAMPTZ NOT NULL,
@@ -141,7 +160,8 @@ class PostgresEntityStore:
         existing = self.get_persona(persona_id)
         if existing is None:
             return None
-        updated = existing.model_copy(update=updates.model_dump(exclude_none=True))
+        # 用 exclude_unset 而非 exclude_none：model_preset_id 是可空字段，显式传 null 才能清空
+        updated = existing.model_copy(update=updates.model_dump(exclude_unset=True))
         updated.updated_at = utc_now()
         with self._get_pool().connection() as conn:
             with conn.transaction():
@@ -305,10 +325,142 @@ class PostgresEntityStore:
                 )
         return self.get_frontend_settings()
 
+    # ============================ ModelPreset CRUD ============================ #
+
+    def _clear_other_defaults(self, conn: Any, exclude_id: str | None = None) -> None:
+        """把其他预设的 is_default 置 False 并写回 preset_json（排除 exclude_id 指定的预设）。"""
+        rows = conn.execute("SELECT preset_id, preset_json FROM model_presets").fetchall()
+        for row in rows:
+            if row["preset_id"] == exclude_id:
+                continue
+            preset = _model_from_payload(ModelPreset, row["preset_json"])
+            if preset.is_default:
+                preset.is_default = False
+                preset.updated_at = utc_now()
+                conn.execute(
+                    "UPDATE model_presets SET preset_json = %s, updated_at = %s WHERE preset_id = %s",
+                    (_jsonb_payload(preset), preset.updated_at, row["preset_id"]),
+                )
+
+    def create_model_preset(self, preset: ModelPreset) -> ModelPreset:
+        now = utc_now()
+        with self._get_pool().connection() as conn:
+            with conn.transaction():
+                cursor = conn.execute(
+                    """
+                    INSERT INTO model_presets (preset_id, preset_json, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (preset_id) DO NOTHING
+                    """,
+                    (preset.id, _jsonb_payload(preset), preset.created_at, now),
+                )
+                # 仅当真正插入成功时才清其他默认，避免重复 id 时清了默认却没插入新默认
+                if cursor.rowcount > 0 and preset.is_default:
+                    self._clear_other_defaults(conn, exclude_id=preset.id)
+        return self.get_model_preset(preset.id)  # type: ignore[return-value]
+
+    def get_model_preset(self, preset_id: str) -> ModelPreset | None:
+        with self._get_pool().connection() as conn:
+            row = conn.execute("SELECT * FROM model_presets WHERE preset_id = %s", (preset_id,)).fetchone()
+        if row is None:
+            return None
+        preset = _model_from_payload(ModelPreset, row["preset_json"])
+        return ModelPreset(
+            id=row["preset_id"],
+            **preset.model_dump(exclude={"id", "created_at", "updated_at"}),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def list_model_presets(self) -> list[ModelPreset]:
+        with self._get_pool().connection() as conn:
+            rows = conn.execute("SELECT preset_id FROM model_presets ORDER BY created_at").fetchall()
+        return [self.get_model_preset(row["preset_id"]) for row in rows]  # type: ignore[misc]
+
+    def update_model_preset(self, preset_id: str, updates: ModelPresetUpdate) -> ModelPreset | None:
+        existing = self.get_model_preset(preset_id)
+        if existing is None:
+            return None
+        updated = existing.model_copy(update=updates.model_dump(exclude_none=True))
+        updated.updated_at = utc_now()
+        with self._get_pool().connection() as conn:
+            with conn.transaction():
+                conn.execute(
+                    "UPDATE model_presets SET preset_json = %s, updated_at = %s WHERE preset_id = %s",
+                    (_jsonb_payload(updated), updated.updated_at, preset_id),
+                )
+        return updated
+
+    def delete_model_preset(self, preset_id: str) -> bool:
+        with self._get_pool().connection() as conn:
+            with conn.transaction():
+                cursor = conn.execute("DELETE FROM model_presets WHERE preset_id = %s", (preset_id,))
+        return cursor.rowcount > 0
+
+    def set_default_model_preset(self, preset_id: str) -> ModelPreset | None:
+        existing = self.get_model_preset(preset_id)
+        if existing is None:
+            return None
+        with self._get_pool().connection() as conn:
+            with conn.transaction():
+                rows = conn.execute("SELECT preset_id, preset_json FROM model_presets").fetchall()
+                for row in rows:
+                    preset = _model_from_payload(ModelPreset, row["preset_json"])
+                    new_default = row["preset_id"] == preset_id
+                    if preset.is_default != new_default:
+                        preset.is_default = new_default
+                        preset.updated_at = utc_now()
+                        conn.execute(
+                            "UPDATE model_presets SET preset_json = %s, updated_at = %s WHERE preset_id = %s",
+                            (_jsonb_payload(preset), preset.updated_at, row["preset_id"]),
+                        )
+        return self.get_model_preset(preset_id)
+
+    # ============================ GuardConfig ============================ #
+
+    def get_guard_config(self) -> GuardConfig:
+        with self._get_pool().connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM guard_config WHERE settings_key = %s",
+                (GUARD_CONFIG_KEY,),
+            ).fetchone()
+        if row is None:
+            # 读路径不写：未保存时返回默认词库，仅在显式 PUT 时持久化。
+            return GuardConfig(settings_key=GUARD_CONFIG_KEY)
+        payload = _model_from_payload(GuardConfig, row["settings_json"])
+        return GuardConfig(
+            settings_key=row["settings_key"],
+            **payload.model_dump(exclude={"settings_key", "created_at", "updated_at"}),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def upsert_guard_config(self, config: GuardConfig) -> GuardConfig:
+        with self._get_pool().connection() as conn:
+            with conn.transaction():
+                conn.execute(
+                    """
+                    INSERT INTO guard_config (settings_key, settings_json, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (settings_key) DO UPDATE SET
+                        settings_json = excluded.settings_json,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        config.settings_key,
+                        _jsonb_payload(config),
+                        config.created_at,
+                        config.updated_at,
+                    ),
+                )
+        return self.get_guard_config()
+
     def clear(self) -> None:
         with self._get_pool().connection() as conn:
             with conn.transaction():
                 conn.execute("DELETE FROM frontend_settings")
+                conn.execute("DELETE FROM guard_config")
+                conn.execute("DELETE FROM model_presets")
                 conn.execute("DELETE FROM knowledge_items")
                 conn.execute("DELETE FROM tasks")
                 conn.execute("DELETE FROM personas")

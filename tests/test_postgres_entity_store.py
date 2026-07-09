@@ -4,7 +4,9 @@ import os
 
 import pytest
 
+from backend.schemas.guard_config_schemas import GuardConfig
 from backend.schemas.knowledge_schemas import KnowledgeItem, KnowledgeItemUpdate
+from backend.schemas.model_preset_schemas import ModelPreset, ModelPresetUpdate
 from backend.schemas.persona_schemas import Persona, PersonaUpdate
 from backend.schemas.settings_schemas import FrontendSettings
 from backend.schemas.task_schemas import Task, TaskUpdate
@@ -137,6 +139,52 @@ class TestPostgresEntityStoreFrontendSettings:
         got = store2.get_frontend_settings()
         assert got.theme == "dark"
         assert got.default_max_steps == 26
+        store2.clear()
+        store2.close()
+
+
+class TestPostgresEntityStoreModelPreset:
+    def test_create_and_get(self, store: PostgresEntityStore) -> None:
+        preset = ModelPreset(name="P1", provider="openai", model_name="gpt-4o", is_default=True)
+        store.create_model_preset(preset)
+        got = store.get_model_preset(preset.id)
+        assert got is not None
+        assert got.name == "P1"
+        assert got.is_default is True
+
+    def test_default_mutual_exclusion(self, store: PostgresEntityStore) -> None:
+        p1 = store.create_model_preset(ModelPreset(name="P1", provider="openai", model_name="m1", is_default=True))
+        p2 = store.create_model_preset(ModelPreset(name="P2", provider="openai", model_name="m2", is_default=True))
+        assert store.get_model_preset(p1.id).is_default is False
+        assert store.get_model_preset(p2.id).is_default is True
+
+        store.set_default_model_preset(p1.id)
+        assert store.get_model_preset(p1.id).is_default is True
+        assert store.get_model_preset(p2.id).is_default is False
+
+    def test_update_and_delete(self, store: PostgresEntityStore) -> None:
+        preset = store.create_model_preset(ModelPreset(name="P1", provider="openai", model_name="m1"))
+        updated = store.update_model_preset(preset.id, ModelPresetUpdate(model_name="m2"))
+        assert updated.model_name == "m2"
+        assert store.delete_model_preset(preset.id) is True
+        assert store.get_model_preset(preset.id) is None
+
+
+class TestPostgresEntityStoreGuardConfig:
+    def test_get_defaults(self, store: PostgresEntityStore) -> None:
+        cfg = store.get_guard_config()
+        assert "删除" in cfg.destructive_keywords
+        assert r"\bpassword\b" in cfg.sensitive_keywords
+
+    def test_persistence_across_reopen(self, store: PostgresEntityStore) -> None:
+        cfg = store.get_guard_config().model_copy(update={"destructive_keywords": ["buy"]})
+        store.upsert_guard_config(cfg)
+        store.close()
+
+        store2 = PostgresEntityStore(_postgres_test_dsn())
+        store2.initialize()
+        got = store2.get_guard_config()
+        assert got.destructive_keywords == ["buy"]
         store2.clear()
         store2.close()
 

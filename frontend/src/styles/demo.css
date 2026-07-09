@@ -18,7 +18,7 @@
   --geist-border-secondary: #f0f0f0;
   --geist-accent: #000000;
   --geist-accent-hover: #333333;
-  --geist-success: #0070f3;
+  --geist-success: #16a34a;
   --geist-warning: #f5a623;
   --geist-error: #ee0000;
   --geist-info: #0070f3;
@@ -60,7 +60,7 @@ body.theme-dark {
   --geist-border-secondary: #222222;
   --geist-accent: #ffffff;
   --geist-accent-hover: #cccccc;
-  --geist-success: #0070f3;
+  --geist-success: #22c55e;
   --geist-warning: #f5a623;
   --geist-error: #ff0000;
   --geist-info: #3291ff;

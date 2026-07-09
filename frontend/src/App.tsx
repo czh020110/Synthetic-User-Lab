@@ -14,6 +14,7 @@ import CompareReportPage from './pages/CompareReportPage';
 import RunDetailPage from './pages/RunDetailPage';
 import ReportPage from './pages/ReportPage';
 import SettingsPage from './pages/SettingsPage';
+import SystemConfigPage from './pages/SystemConfigPage';
 import HelpPage from './pages/HelpPage';
 import NotFoundPage from './pages/NotFoundPage';
 import AppProviders from './providers/AppProviders';
@@ -36,6 +37,7 @@ function App() {
             <Route path="/runs/:runId" element={<RunDetailPage />} />
             <Route path="/runs/:runId/report" element={<ReportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/system" element={<SystemConfigPage />} />
             <Route path="/help" element={<HelpPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>

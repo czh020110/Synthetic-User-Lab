@@ -9,6 +9,7 @@ export interface Persona {
   skill_level: SkillLevel;
   patience_level: PatienceLevel;
   risk_preference: RiskPreference;
+  model_preset_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -19,6 +20,7 @@ export interface PersonaCreate {
   skill_level?: SkillLevel;
   patience_level?: PatienceLevel;
   risk_preference?: RiskPreference;
+  model_preset_id?: string | null;
 }
 
 export interface PersonaUpdate {
@@ -27,4 +29,5 @@ export interface PersonaUpdate {
   skill_level?: SkillLevel | null;
   patience_level?: PatienceLevel | null;
   risk_preference?: RiskPreference | null;
+  model_preset_id?: string | null;
 }

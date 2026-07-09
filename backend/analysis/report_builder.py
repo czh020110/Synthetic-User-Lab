@@ -14,9 +14,8 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import SecretStr
 
-from backend.ai_api.provider_router import get_model_router
+from backend.ai_api.model_resolver import resolve_runtime_model
 from backend.analysis.friction_analyzer import analyze_friction
-from backend.core.config import get_settings
 from backend.prompt.report import REPORT_ANALYSIS_PROMPT
 from backend.schemas.run_schemas import (
     FrictionIssue,
@@ -261,30 +260,33 @@ def _should_call_agent(facts: ReportFacts) -> bool:
 
 
 def _build_report_llm() -> Any | None:
-    """构建使用 FAST_MODEL 的报告分析 LLM。"""
+    """构建使用 FAST_MODEL 的报告分析 LLM。
 
-    settings = get_settings()
-    model_name = settings.fast_model_name or settings.model_name
-    router = get_model_router()
+    报告分析不绑定具体 persona，使用默认模型预设（无预设时 env 兜底）。
+    """
+    from backend.stores import get_entity_store
 
-    if not model_name or not router.api_key or router.model_provider not in {"openai", "dashscope"}:
+    cfg = resolve_runtime_model(None, get_entity_store())
+    model_name = cfg.fast_model_name or cfg.model_name
+
+    if not model_name or not cfg.api_key or cfg.provider not in {"openai", "dashscope"}:
         return None
 
-    if router.model_provider == "openai":
+    if cfg.provider == "openai":
         from langchain_openai import ChatOpenAI
 
         return ChatOpenAI(
             model=model_name,
-            api_key=SecretStr(router.api_key),
-            base_url=router.base_url or None,
+            api_key=SecretStr(cfg.api_key),
+            base_url=cfg.base_url or None,
         )
 
-    if router.model_provider == "dashscope":
+    if cfg.provider == "dashscope":
         from langchain_community.chat_models.tongyi import ChatTongyi
 
         return ChatTongyi(
             model=model_name,
-            api_key=SecretStr(router.api_key),
+            api_key=SecretStr(cfg.api_key),
         )
 
     return None
@@ -337,15 +339,14 @@ def _build_agent_messages(facts: ReportFacts, record: RunRecord) -> list[Any]:
 def _generate_report_analysis(facts: ReportFacts, record: RunRecord) -> dict[str, Any]:
     """调用 FAST_MODEL 生成报告语义层（同步）。"""
 
-    llm = _build_report_llm()
-    if llm is None:
-        return {}
-
-    messages = _build_agent_messages(facts, record)
-
     try:
+        llm = _build_report_llm()
+        if llm is None:
+            return {}
+        messages = _build_agent_messages(facts, record)
         response = llm.invoke(messages)
     except Exception:
+        # _build_report_llm 现会做 DB 读（resolve_runtime_model），DB 故障时降级为无 LLM 报告而非击溃报告
         return {}
 
     response_text = _extract_message_text(response)
@@ -355,13 +356,11 @@ def _generate_report_analysis(facts: ReportFacts, record: RunRecord) -> dict[str
 async def _generate_report_analysis_async(facts: ReportFacts, record: RunRecord) -> dict[str, Any]:
     """调用 FAST_MODEL 生成报告语义层（异步）。"""
 
-    llm = _build_report_llm()
-    if llm is None:
-        return {}
-
-    messages = _build_agent_messages(facts, record)
-
     try:
+        llm = _build_report_llm()
+        if llm is None:
+            return {}
+        messages = _build_agent_messages(facts, record)
         response = await llm.ainvoke(messages)
     except Exception:
         return {}

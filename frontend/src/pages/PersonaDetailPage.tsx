@@ -3,6 +3,7 @@ import { ArrowLeftOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined } f
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { usePersonas, useDeletePersona } from '../hooks/usePersonas';
+import { useModelPresets } from '../hooks/useSystemConfig';
 import PersonaForm from '../components/entities/forms/PersonaForm';
 import dayjs from 'dayjs';
 import { AppEmpty, AppLoading } from '../components/feedback/AppFeedback';
@@ -13,6 +14,7 @@ export default function PersonaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: personas, isLoading } = usePersonas();
+  const { data: presets } = useModelPresets();
   const deletePersona = useDeletePersona();
   const [editOpen, setEditOpen] = useState(false);
 
@@ -94,6 +96,11 @@ export default function PersonaDetailPage() {
                 <Tag color={persona.risk_preference === 'high' ? 'red' : persona.risk_preference === 'medium' ? 'orange' : 'green'}>
                   {persona.risk_preference}
                 </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Model Preset">
+                {persona.model_preset_id
+                  ? (presets?.find((p) => p.id === persona.model_preset_id)?.name ?? 'Default')
+                  : 'Default'}
               </Descriptions.Item>
             </Descriptions>
             <Divider style={{ margin: '16px 0' }} />

@@ -397,18 +397,16 @@ def test_extract_structured_facts() -> None:
 def test_build_report_llm_uses_fast_model(monkeypatch) -> None:
     """验证 _build_report_llm 使用 fast_model_name 而非 model_name。"""
 
-    class FakeSettings:
-        fast_model_name = "fast-test-model"
-        model_name = "main-test-model"
-        model_provider = "openai"
+    from backend.ai_api.model_resolver import RuntimeModelConfig
 
-    class FakeRouter:
-        api_key = "test-key"
-        model_provider = "openai"
-        base_url = None
-
-    monkeypatch.setattr(report_builder, "get_settings", lambda: FakeSettings())
-    monkeypatch.setattr(report_builder, "get_model_router", lambda: FakeRouter())
+    cfg = RuntimeModelConfig(
+        provider="openai",
+        api_key="test-key",
+        base_url="",
+        model_name="main-test-model",
+        fast_model_name="fast-test-model",
+    )
+    monkeypatch.setattr(report_builder, "resolve_runtime_model", lambda persona, store: cfg)
 
     llm = report_builder._build_report_llm()
     assert llm is not None
@@ -418,18 +416,16 @@ def test_build_report_llm_uses_fast_model(monkeypatch) -> None:
 def test_build_report_llm_falls_back_to_main_model(monkeypatch) -> None:
     """fast_model_name 为空时应回退到 model_name。"""
 
-    class FakeSettings:
-        fast_model_name = None
-        model_name = "main-fallback-model"
-        model_provider = "openai"
+    from backend.ai_api.model_resolver import RuntimeModelConfig
 
-    class FakeRouter:
-        api_key = "test-key"
-        model_provider = "openai"
-        base_url = None
-
-    monkeypatch.setattr(report_builder, "get_settings", lambda: FakeSettings())
-    monkeypatch.setattr(report_builder, "get_model_router", lambda: FakeRouter())
+    cfg = RuntimeModelConfig(
+        provider="openai",
+        api_key="test-key",
+        base_url="",
+        model_name="main-fallback-model",
+        fast_model_name="",
+    )
+    monkeypatch.setattr(report_builder, "resolve_runtime_model", lambda persona, store: cfg)
 
     llm = report_builder._build_report_llm()
     assert llm is not None

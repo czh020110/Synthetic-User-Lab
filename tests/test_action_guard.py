@@ -9,6 +9,12 @@ from backend.schemas.run_schemas import (
     WaitActionPayload,
 )
 from backend.schemas.task_schemas import Task
+from backend.stores import get_entity_store
+
+
+def setup_function():
+    """每个测试前重置 EntityStore，避免 is_destructive_action 读到被其他测试污染的护栏关键词。"""
+    get_entity_store().clear()
 
 
 def test_navigate_same_domain_allowed():

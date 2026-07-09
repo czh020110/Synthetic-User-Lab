@@ -23,10 +23,13 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     # 启动：seed MVP 样例 persona/task 到 EntityStore（幂等，已存在则跳过）
     from backend.api.routes.runs import shutdown_background_tasks as shutdown_formal_background_tasks
+    from backend.fixtures.model_preset_seed import seed_default_model_preset_if_absent
     from backend.fixtures.mvp_samples import seed_mvp_samples_if_absent
     from backend.stores import _reset_entity_store, _reset_run_store, get_entity_store
 
-    seed_mvp_samples_if_absent(get_entity_store())
+    entity_store = get_entity_store()
+    seed_mvp_samples_if_absent(entity_store)
+    seed_default_model_preset_if_absent(entity_store)
 
     yield
 

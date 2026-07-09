@@ -10,7 +10,9 @@ from datetime import datetime
 from pathlib import Path
 
 from backend.core.utils import utc_now
+from backend.schemas.guard_config_schemas import GUARD_CONFIG_KEY, GuardConfig
 from backend.schemas.knowledge_schemas import KnowledgeItem, KnowledgeItemUpdate
+from backend.schemas.model_preset_schemas import ModelPreset, ModelPresetUpdate
 from backend.schemas.persona_schemas import Persona, PersonaUpdate
 from backend.schemas.settings_schemas import FRONTEND_SETTINGS_KEY, FrontendSettings
 from backend.schemas.task_schemas import Task, TaskUpdate
@@ -43,6 +45,21 @@ CREATE TABLE IF NOT EXISTS knowledge_items (
 CREATE INDEX IF NOT EXISTS idx_knowledge_items_source_type ON knowledge_items(source_type);
 
 CREATE TABLE IF NOT EXISTS frontend_settings (
+    settings_key   TEXT PRIMARY KEY,
+    settings_json  TEXT NOT NULL,
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS model_presets (
+    preset_id   TEXT PRIMARY KEY,
+    preset_json TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_model_presets_created_at ON model_presets(created_at);
+
+CREATE TABLE IF NOT EXISTS guard_config (
     settings_key   TEXT PRIMARY KEY,
     settings_json  TEXT NOT NULL,
     created_at     TEXT NOT NULL,
@@ -127,7 +144,8 @@ class SqliteEntityStore:
         existing = self.get_persona(persona_id)
         if existing is None:
             return None
-        update_data = updates.model_dump(exclude_none=True)
+        # 用 exclude_unset 而非 exclude_none：model_preset_id 是可空字段，显式传 null 才能清空
+        update_data = updates.model_dump(exclude_unset=True)
         updated = existing.model_copy(update=update_data)
         updated.updated_at = utc_now()
         conn = self._get_conn()
@@ -297,11 +315,143 @@ class SqliteEntityStore:
         conn.commit()
         return self.get_frontend_settings()
 
+    # ============================ ModelPreset CRUD ============================ #
+
+    def _clear_other_defaults(self, conn: sqlite3.Connection, exclude_id: str | None = None) -> None:
+        """把其他预设的 is_default 置 False 并写回 preset_json（排除 exclude_id 指定的预设）。"""
+        rows = conn.execute("SELECT preset_id, preset_json FROM model_presets").fetchall()
+        for row in rows:
+            if row["preset_id"] == exclude_id:
+                continue
+            preset = ModelPreset.model_validate_json(row["preset_json"])
+            if preset.is_default:
+                preset.is_default = False
+                preset.updated_at = utc_now()
+                conn.execute(
+                    "UPDATE model_presets SET preset_json = ?, updated_at = ? WHERE preset_id = ?",
+                    (preset.model_dump_json(), _dt_to_str(preset.updated_at), row["preset_id"]),
+                )
+
+    def create_model_preset(self, preset: ModelPreset) -> ModelPreset:
+        conn = self._get_conn()
+        now = _dt_to_str(utc_now())
+        try:
+            # 先插入，成功后再清其他默认（排除自身），避免重复 id 时清了默认却没插入新默认
+            conn.execute(
+                "INSERT INTO model_presets (preset_id, preset_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (preset.id, preset.model_dump_json(), _dt_to_str(preset.created_at), now),
+            )
+            if preset.is_default:
+                self._clear_other_defaults(conn, exclude_id=preset.id)
+            conn.commit()
+        except sqlite3.IntegrityError:
+            # 重复 id：回滚，保持原状，不泄漏清默认的 UPDATE
+            conn.rollback()
+        return self.get_model_preset(preset.id)  # type: ignore[return-value]
+
+    def get_model_preset(self, preset_id: str) -> ModelPreset | None:
+        conn = self._get_conn()
+        row = conn.execute("SELECT * FROM model_presets WHERE preset_id = ?", (preset_id,)).fetchone()
+        if row is None:
+            return None
+        return ModelPreset(
+            id=row["preset_id"],
+            **ModelPreset.model_validate_json(row["preset_json"]).model_dump(exclude={"id", "created_at", "updated_at"}),
+            created_at=_str_to_dt(row["created_at"]),
+            updated_at=_str_to_dt(row["updated_at"]),
+        )
+
+    def list_model_presets(self) -> list[ModelPreset]:
+        conn = self._get_conn()
+        rows = conn.execute("SELECT * FROM model_presets ORDER BY created_at").fetchall()
+        return [self.get_model_preset(r["preset_id"]) for r in rows]  # type: ignore[misc]
+
+    def update_model_preset(self, preset_id: str, updates: ModelPresetUpdate) -> ModelPreset | None:
+        existing = self.get_model_preset(preset_id)
+        if existing is None:
+            return None
+        updated = existing.model_copy(update=updates.model_dump(exclude_none=True))
+        updated.updated_at = utc_now()
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE model_presets SET preset_json = ?, updated_at = ? WHERE preset_id = ?",
+            (updated.model_dump_json(), _dt_to_str(updated.updated_at), preset_id),
+        )
+        conn.commit()
+        return updated
+
+    def delete_model_preset(self, preset_id: str) -> bool:
+        conn = self._get_conn()
+        cursor = conn.execute("DELETE FROM model_presets WHERE preset_id = ?", (preset_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def set_default_model_preset(self, preset_id: str) -> ModelPreset | None:
+        existing = self.get_model_preset(preset_id)
+        if existing is None:
+            return None
+        conn = self._get_conn()
+        rows = conn.execute("SELECT preset_id, preset_json FROM model_presets").fetchall()
+        for row in rows:
+            preset = ModelPreset.model_validate_json(row["preset_json"])
+            new_default = row["preset_id"] == preset_id
+            if preset.is_default != new_default:
+                preset.is_default = new_default
+                preset.updated_at = utc_now()
+                conn.execute(
+                    "UPDATE model_presets SET preset_json = ?, updated_at = ? WHERE preset_id = ?",
+                    (preset.model_dump_json(), _dt_to_str(preset.updated_at), row["preset_id"]),
+                )
+        conn.commit()
+        return self.get_model_preset(preset_id)
+
+    # ============================ GuardConfig ============================ #
+
+    def get_guard_config(self) -> GuardConfig:
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM guard_config WHERE settings_key = ?",
+            (GUARD_CONFIG_KEY,),
+        ).fetchone()
+        if row is None:
+            # 读路径不写：未保存时返回默认词库，仅在显式 PUT 时持久化。
+            return GuardConfig(settings_key=GUARD_CONFIG_KEY)
+        return GuardConfig(
+            settings_key=row["settings_key"],
+            **GuardConfig.model_validate_json(row["settings_json"]).model_dump(
+                exclude={"settings_key", "created_at", "updated_at"}
+            ),
+            created_at=_str_to_dt(row["created_at"]),
+            updated_at=_str_to_dt(row["updated_at"]),
+        )
+
+    def upsert_guard_config(self, config: GuardConfig) -> GuardConfig:
+        conn = self._get_conn()
+        conn.execute(
+            """
+            INSERT INTO guard_config (settings_key, settings_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(settings_key) DO UPDATE SET
+                settings_json = excluded.settings_json,
+                updated_at = excluded.updated_at
+            """,
+            (
+                config.settings_key,
+                config.model_dump_json(),
+                _dt_to_str(config.created_at),
+                _dt_to_str(config.updated_at),
+            ),
+        )
+        conn.commit()
+        return self.get_guard_config()
+
     # ============================ 通用 ============================ #
 
     def clear(self) -> None:
         conn = self._get_conn()
         conn.execute("DELETE FROM frontend_settings")
+        conn.execute("DELETE FROM guard_config")
+        conn.execute("DELETE FROM model_presets")
         conn.execute("DELETE FROM knowledge_items")
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM personas")

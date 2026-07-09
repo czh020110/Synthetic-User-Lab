@@ -6,6 +6,7 @@ import {
   RocketOutlined,
   QuestionCircleOutlined,
   SettingOutlined,
+  ToolOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +22,7 @@ export default function AppLayout() {
     { key: '/', icon: <DashboardOutlined />, label: t('nav.dashboard') },
     { key: '/entities', icon: <TeamOutlined />, label: t('nav.entities') },
     { key: '/runs/new', icon: <RocketOutlined />, label: t('nav.startRun') },
+    { key: '/system', icon: <ToolOutlined />, label: t('nav.systemConfig') },
   ];
 
   // Determine selected key based on current path
@@ -35,6 +37,9 @@ export default function AppLayout() {
   }
   if (selectedKey.startsWith('/settings')) {
     selectedKey = '/settings';
+  }
+  if (selectedKey.startsWith('/system')) {
+    selectedKey = '/system';
   }
   if (selectedKey.startsWith('/help')) {
     selectedKey = '/help';
