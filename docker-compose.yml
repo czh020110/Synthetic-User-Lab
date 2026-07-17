@@ -1,0 +1,46 @@
+# Synthetic User Lab 容器编排：postgres + backend
+# 用法：cp .env.docker.example .env 填入模型 key，然后 docker compose up
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: synthetic_user_lab
+      POSTGRES_USER: synthetic
+      POSTGRES_PASSWORD: synthetic
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    # 不暴露到宿主：PG 仅对 backend 容器可见（compose 内网 postgres:5432）。
+    # 如需从宿主直连 PG（如用 DataGrip 查看），取消注释下面两行（注意宿主 5432 不能被占用）。
+    # ports:
+    #   - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synthetic -d synthetic_user_lab"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: .
+    ports:
+      - "8765:8000"
+    # 模型 key（provider/api_key/base_url/model_name）由用户 .env 注入，不进镜像
+    env_file: .env
+    environment:
+      # 容器专用配置：优先于 .env，与用户配置分离
+      SYNTHETIC_USER_LAB_HOST: 0.0.0.0
+      SYNTHETIC_USER_LAB_PORT: 8000
+      # Playwright 同容器回环访问 /site 测试站点，必须用 127.0.0.1:8000
+      SYNTHETIC_USER_LAB_BASE_URL: http://127.0.0.1:8000
+      # 指向 compose 内 postgres 服务
+      SYNTHETIC_USER_LAB_DATABASE_URL: postgresql://synthetic:synthetic@postgres:5432/synthetic_user_lab
+      SYNTHETIC_USER_LAB_FRONTEND_DIR: /app/static
+    volumes:
+      # 截图 bind mount 到宿主，便于直接查看 run 截图
+      - ./screenshots:/app/screenshots
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pg_data:

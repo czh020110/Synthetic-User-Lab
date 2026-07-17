@@ -32,6 +32,8 @@ class Settings(BaseModel):
     screenshot_dir: Path
     database_url: str
     cors_origins: list[str]
+    # 前端构建产物目录；本地开发为 None（走 vite dev + proxy），容器内指向 /app/static 由后端直接托管
+    frontend_dir: Path | None
     custom_system_prompt: str
     model_provider: str
     base_url: str
@@ -75,6 +77,7 @@ def get_settings() -> Settings:
         screenshot_dir=BASE_DIR / "screenshots",
         database_url=os.getenv("SYNTHETIC_USER_LAB_DATABASE_URL", str(BASE_DIR / "data" / "synthetic_user_lab.db")),
         cors_origins=[s.strip() for s in os.getenv("SYNTHETIC_USER_LAB_CORS_ORIGINS", "http://localhost:5173").split(",") if s.strip()],
+        frontend_dir=(Path(p) if (p := os.getenv("SYNTHETIC_USER_LAB_FRONTEND_DIR")) else None),
         custom_system_prompt=os.getenv("CUSTOM_SYSTEM_PROMPT", ""),
         model_provider=model_router.model_provider,
         base_url=model_router.base_url,

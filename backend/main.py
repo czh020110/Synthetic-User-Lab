@@ -12,11 +12,23 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend.api.router import api_router
 from backend.core.config import get_settings
 
 settings = get_settings()
+
+
+# 仅托管前端 SPA：对未命中静态文件的 GET 请求回退到 index.html，
+# 让 react-router 的客户端路由（如 /runs/new）刷新不 404。
+# /api /site /demo 由下方先注册的路由/挂载接管，不会被这里拦截。
+class SPAStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except (StarletteHTTPException, RuntimeError):
+            return await super().get_response("index.html", scope)
 
 
 @asynccontextmanager
@@ -50,3 +62,8 @@ app.add_middleware(
 app.include_router(api_router, prefix=settings.api_prefix)
 app.mount("/demo", StaticFiles(directory=settings.demo_site_dir, html=True), name="demo")
 app.mount("/site", StaticFiles(directory=settings.test_site_dir, html=True), name="test_site")
+
+# 容器内托管前端构建产物（本地开发 frontend_dir 为 None，仍走 vite dev 5173 + proxy）。
+# 必须在 /api /site /demo 之后挂载，作为 catch-all 兜底。
+if settings.frontend_dir is not None:
+    app.mount("/", SPAStaticFiles(directory=settings.frontend_dir, html=True), name="frontend")
