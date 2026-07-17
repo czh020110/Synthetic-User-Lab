@@ -61,7 +61,7 @@ export default function KnowledgeDetailPage() {
         </Tag>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+      <div className="app-grid-2col-wide">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           <Card className="demo-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>

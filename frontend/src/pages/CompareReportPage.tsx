@@ -73,7 +73,7 @@ export default function CompareReportPage() {
   }
 
   if (pollQuery.isError || (statuses && missingCount > 0)) {
-    const missingMsg = statuses && missingCount > 0 ? `${missingCount} 个 run 不存在或已被清除` : undefined;
+    const missingMsg = statuses && missingCount > 0 ? t('compare.missingRuns', { count: missingCount }) : undefined;
     return (
       <div>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')} style={{ marginBottom: 16 }}>
@@ -181,7 +181,7 @@ export default function CompareReportPage() {
         </Title>
       </div>
       <Text style={{ fontSize: 13, color: 'var(--geist-foreground-tertiary)', display: 'block', marginBottom: 24 }}>
-        任务：{report.task.name} · {report.comparison_summary}
+        {t('compare.taskLabel')}：{report.task.name} · {report.comparison_summary}
       </Text>
 
       <Row gutter={12} style={{ marginBottom: 24 }}>

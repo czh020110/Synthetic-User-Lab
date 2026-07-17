@@ -137,7 +137,7 @@ export default function SettingsPage() {
         />
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+      <div className="app-grid-2col">
         <Card className="demo-card">
           <Title level={4} style={{ marginBottom: 16 }}>{t('settings.general')}</Title>
           <Form form={generalForm} layout="vertical">

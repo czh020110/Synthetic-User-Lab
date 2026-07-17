@@ -62,7 +62,7 @@ export default function PersonaDetailPage() {
         <Tag color="blue">{persona.skill_level}</Tag>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+      <div className="app-grid-2col">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           <Card className="demo-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>

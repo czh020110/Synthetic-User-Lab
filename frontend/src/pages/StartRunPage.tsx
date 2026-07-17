@@ -55,7 +55,7 @@ export default function StartRunPage() {
           headless,
           max_steps_override: maxStepsOverride,
         });
-        message.success('Run 已启动');
+        message.success(t('startRun.startedSingle'));
         navigate(`/runs/${result.run_id}`);
       } else {
         const result = await startBatch.mutateAsync({
@@ -65,11 +65,11 @@ export default function StartRunPage() {
           headless,
           max_steps_override: maxStepsOverride,
         });
-        message.success(`已启动 ${result.run_ids.length} 个 run`);
+        message.success(t('startRun.startedBatch', { count: result.run_ids.length }));
         navigate(`/runs/compare?ids=${result.run_ids.join(',')}`);
       }
     } catch (err) {
-      message.error(`启动失败: ${(err as Error).message}`);
+      message.error(t('startRun.startFailed', { message: (err as Error).message }));
     }
   };
 
@@ -102,10 +102,10 @@ export default function StartRunPage() {
             <>
               {t('startRun.emptyDescriptionPrefix')}{' '}
               {personasEmpty && tasksEmpty
-                ? 'a Persona and a Task'
+                ? t('startRun.entityPersonaAndTask')
                 : personasEmpty
-                  ? 'a Persona'
-                  : 'a Task'}{' '}
+                  ? t('startRun.entityPersona')
+                  : t('startRun.entityTask')}{' '}
               {t('startRun.emptyDescriptionSuffix')}
             </>
           )}
@@ -138,11 +138,11 @@ export default function StartRunPage() {
               <Form.Item
                 name="persona_ids"
                 label={<Text strong style={{ fontSize: 13 }}>{t('startRun.persona')}</Text>}
-                rules={[{ required: true, message: '请至少选择一个 Persona', type: 'array' }]}
+                rules={[{ required: true, message: t('startRun.rulePersonaRequired'), type: 'array' }]}
               >
                 <Select
                   mode="multiple"
-                  placeholder="选择一个或多个 persona"
+                  placeholder={t('startRun.selectPersonaPlaceholder')}
                   loading={!personas}
                   options={(personas || []).map((p) => ({
                     value: p.id,
@@ -160,10 +160,10 @@ export default function StartRunPage() {
               <Form.Item
                 name="task_id"
                 label={<Text strong style={{ fontSize: 13 }}>{t('startRun.task')}</Text>}
-                rules={[{ required: true, message: '请选择 Task' }]}
+                rules={[{ required: true, message: t('startRun.ruleTaskRequired') }]}
               >
                 <Select
-                  placeholder="Select a task"
+                  placeholder={t('startRun.selectTaskPlaceholder')}
                   loading={!tasks}
                   options={(tasks || []).map((tItem) => ({
                     value: tItem.id,
@@ -181,7 +181,7 @@ export default function StartRunPage() {
               </Form.Item>
 
               <Form.Item name="run_name" label={<Text strong style={{ fontSize: 13 }}>{t('startRun.runName')}</Text>}>
-                <Input placeholder="run" />
+                <Input placeholder={t('startRun.runNamePlaceholder')} />
               </Form.Item>
 
               <Form.Item
@@ -212,13 +212,13 @@ export default function StartRunPage() {
               <div style={{ marginBottom: 24, padding: '14px 16px', background: 'var(--geist-overlay)', borderRadius: 5, border: '1px solid var(--geist-border-secondary)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <InfoCircleOutlined style={{ color: 'var(--geist-foreground-tertiary)', fontSize: 13 }} />
-                  <Text strong style={{ fontSize: 13 }}>Tips</Text>
+                  <Text strong style={{ fontSize: 13 }}>{t('startRun.tipsTitle')}</Text>
                 </div>
                 <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: 'var(--geist-foreground-tertiary)', lineHeight: 1.8 }}>
-                  <li>选择多个 Persona 可发起批量 run 并生成对比报告</li>
-                  <li>选择与任务难度匹配的 Persona</li>
-                  <li>高风险任务会自动启用安全护栏</li>
-                  <li>Headless 模式运行更快</li>
+                  <li>{t('startRun.tipCompare')}</li>
+                  <li>{t('startRun.tipMatch')}</li>
+                  <li>{t('startRun.tipGuard')}</li>
+                  <li>{t('startRun.tipHeadless')}</li>
                 </ul>
               </div>
 

@@ -46,7 +46,7 @@
   --color-sidebar-hover: var(--geist-overlay);
 
   /* Layout */
-  --sider-width: 220px;
+  --sider-width: 240px;
   --content-max-width: 1200px;
   --transition: 150ms ease;
 }
@@ -134,6 +134,92 @@ body {
   padding: 40px 48px;
   max-width: var(--content-max-width);
   margin: 0 auto;
+}
+
+/* ---- Sider Bottom Actions ---- */
+.app-sider-bottom {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-sider-bottom > .ant-btn-primary {
+  height: 36px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: var(--geist-foreground);
+  border-color: var(--geist-foreground);
+  color: var(--geist-background);
+}
+
+.app-sider-bottom-row {
+  display: flex;
+  gap: 8px;
+}
+
+.app-sider-bottom-row .ant-btn {
+  flex: 1;
+  height: 32px;
+  font-size: 12px;
+  color: var(--geist-foreground-secondary);
+  border-color: var(--geist-border-secondary);
+}
+
+/* ---- Mobile Layout ---- */
+.app-mobile-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 4px;
+  background: var(--geist-sidebar-bg);
+  border-bottom: 1px solid var(--geist-sidebar-border);
+  z-index: 100;
+}
+
+.app-mobile-header .app-logo {
+  border-bottom: none;
+  padding: 0;
+}
+
+.app-content-wrapper-mobile {
+  margin-left: 0;
+  padding-top: 48px;
+}
+
+/* 抽屉内复用 .app-sider 样式，但改为静态流式布局 */
+.app-sider-drawer {
+  position: static !important;
+  background: var(--geist-sidebar-bg) !important;
+  min-height: 100%;
+}
+
+.app-sider-drawer .app-sider-bottom {
+  position: static;
+  padding: 16px 16px 24px;
+  margin-top: 16px;
+  border-top: 1px solid var(--geist-border-secondary);
+}
+
+/* ---- Responsive grids (移动端单列) ---- */
+.app-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.app-grid-2col-wide {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
 }
 
 /* ---- Sidebar Menu ---- */
@@ -947,6 +1033,11 @@ body {
     flex-direction: column;
     text-align: center;
     padding: 24px;
+  }
+
+  .app-grid-2col,
+  .app-grid-2col-wide {
+    grid-template-columns: 1fr;
   }
 }
 
