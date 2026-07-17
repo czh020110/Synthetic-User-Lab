@@ -49,8 +49,11 @@ async def observe_page(page: Any) -> ObservedPageState:
         () => Array.from(document.querySelectorAll('input, textarea, select'))
             .filter((element) => !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length))
             .slice(0, 20)
-            .map((element) => {
-                const name = element.getAttribute('name') || element.id || '';
+            .map((element, index) => {
+                // name 取语义来源：html name 属性 > id > aria-label > placeholder，便于 LLM 区分字段
+                const attrName = element.getAttribute('name') || element.id || element.getAttribute('aria-label') || element.getAttribute('placeholder') || '';
+                // selector 优先用稳定的全局唯一定位符；id/name 缺失时回退到主动注入的 data-form-field-index，
+                // 避免 nth-of-type 在多父容器下同时匹配多个元素导致 Playwright strict mode violation。
                 let selector;
                 if (element.id) {
                     selector = `#${CSS.escape(element.id)}`;
@@ -58,13 +61,11 @@ async def observe_page(page: Any) -> ObservedPageState:
                     const tagName = element.tagName.toLowerCase();
                     selector = `${tagName}[name="${CSS.escape(element.getAttribute('name'))}"]`;
                 } else {
-                    const tagName = element.tagName.toLowerCase();
-                    const sameTagElements = Array.from(document.querySelectorAll(tagName));
-                    const sameTagIndex = sameTagElements.indexOf(element) + 1;
-                    selector = `${tagName}:nth-of-type(${sameTagIndex})`;
+                    selector = `[data-form-field-index="${index}"]`;
+                    element.setAttribute('data-form-field-index', String(index));
                 }
                 return {
-                    name: name || `field-${element.tagName.toLowerCase()}`,
+                    name: attrName || `field-${element.tagName.toLowerCase()}`,
                     selector,
                     value: element.value || '',
                 };
