@@ -119,10 +119,11 @@ npm run dev:web  # 仅前端：cd frontend && npm run dev
    ![alt text](assets/image-5.png)
 6. **Compare** 多 persona 对比表与统计（成功率 / 结论分布 / 平均步数 / 摩擦信号数）
 
+   ![alt text](assets/image-7.png)
+
 > 调试时可把 `SYNTHETIC_USER_LAB_HEADLESS=false` 看到真实浏览器窗口；也可在 Start Run 用 `max_steps_override` 临时覆盖本次 run 的步数上限（不回写 task 模板）。
 
 ---
-
 ## 内置测试站点 ShopLab
 
 项目自带一个自托管的真实感电商测试站点（`backend/fixtures/test_site/`，通过 `/site` 挂载），包含 4 个页面构成完整多步业务流：
