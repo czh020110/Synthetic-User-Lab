@@ -14,7 +14,8 @@ RUN npm run build
 
 # ============================ Stage 2: 后端运行时 ============================ #
 # Playwright 官方镜像预装 Chromium 等浏览器二进制与系统依赖，免去 playwright install
-FROM mcr.microsoft.com/playwright:v1.56.0-jammy
+# 镜像 tag 必须与 pyproject.toml 钉死的 playwright 版本一致（二进制路径按版本命名）
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy
 
 # 用官方 uv 二进制镜像拷贝 uv，无需 pip（playwright 基础镜像未装 pip）
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
